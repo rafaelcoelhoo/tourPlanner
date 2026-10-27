@@ -37,6 +37,10 @@ const TRANSLATIONS: Record<string, { en: string; es: string }> = {
   "Cidade em falta.": { en: "City is missing.", es: "Falta la ciudad." },
   "Demasiadas tentativas. Tente novamente mais tarde.": { en: "Too many attempts. Please try again later.", es: "Demasiados intentos. Inténtalo de nuevo más tarde." },
   "Link inválido ou expirado.": { en: "Invalid or expired link.", es: "Enlace no válido o caducado." },
+  "O horário deste mês já foi publicado. Contacte o administrador para alterar disponibilidades.": {
+    en: "This month's schedule is already published. Contact the administrator to change availability.",
+    es: "El horario de este mes ya está publicado. Contacta con el administrador para cambiar disponibilidades.",
+  },
   "Não encontrado.": { en: "Not found.", es: "No encontrado." },
   "Erro interno.": { en: "Internal error.", es: "Error interno." },
   "Dados inválidos.": { en: "Invalid data.", es: "Datos no válidos." },

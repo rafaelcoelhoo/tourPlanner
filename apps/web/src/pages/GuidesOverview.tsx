@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { MonthNav } from "../components/MonthNav";
 import { useCity } from "../city";
@@ -45,18 +45,15 @@ export const GuidesByGroup = ({ guides, by }: { guides: GuideListItem[]; by: "to
   );
 };
 
-const now = new Date();
-
 export const GuidesLoad = ({ guides }: { guides: GuideListItem[] }) => {
-  const [ym, setYm] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
-  const { cityId } = useCity();
+  const { cityId, ym, setYm } = useCity();
   const { t: tr } = useI18n();
   const cat = useCatalog();
   const month = useFetch<MonthView>(cityId ? `/cities/${cityId}/months/${ym.year}/${ym.month}` : null);
   const rows = useMemo(() => {
     if (!cat.data || !month.data) return [];
     const slotTour = new Map(cat.data.slots.map((s) => [s.id, s.tourId]));
-    const occTour = new Map(month.data.occurrences.filter((o) => o.status === "ACTIVE").map((o) => [o.id, slotTour.get(o.slotId) ?? ""]));
+    const occTour = new Map(month.data.occurrences.filter((o) => o.status === "ACTIVE" && o.needed > 0).map((o) => [o.id, slotTour.get(o.slotId) ?? ""]));
     const perGuide = new Map<string, Map<string, number>>();
     for (const o of month.data.occurrences) {
       const tourId = occTour.get(o.id);

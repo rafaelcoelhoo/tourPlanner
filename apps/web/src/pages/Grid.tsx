@@ -6,26 +6,32 @@ import { MonthNav } from "../components/MonthNav";
 import { OccurrenceEditor } from "../components/OccurrenceEditor";
 import { useCity } from "../city";
 import { useCatalog, useFetch } from "../hooks";
-import { addDays, daysInMonth, errMsg, slotLabel, sortSlots, weekdayIdx } from "../format";
+import { daysInMonth, errMsg, slotLabel, sortSlots, weekdayIdx } from "../format";
 import { useI18n } from "../i18n";
 import type { MonthView, OccurrenceView } from "../types";
 
-const now = new Date();
-
 export const GridPage = () => {
-  const [ym, setYm] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
-  const [weekStart, setWeekStart] = useState<string | null>(null);
+  const { cityId, ym, setYm } = useCity();
+  const [weekIdx, setWeekIdx] = useState<number | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [showStats, setShowStats] = useState(false);
-  const { cityId } = useCity();
   const { t, fmtDate, weekdayInitial } = useI18n();
   const cat = useCatalog();
   const base = `/cities/${cityId}/months/${ym.year}/${ym.month}`;
   const month = useFetch<MonthView>(cityId ? base : null);
 
   const byKey = useMemo(() => new Map((month.data?.occurrences ?? []).map((o) => [`${o.slotId}|${o.date}`, o])), [month.data]);
-  const dates = weekStart ? Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)) : daysInMonth(ym.year, ym.month);
+  const monthDates = useMemo(() => daysInMonth(ym.year, ym.month), [ym.year, ym.month]);
+  const weeks = useMemo(() => {
+    const out: string[][] = [];
+    for (const d of monthDates) {
+      if (out.length === 0 || weekdayIdx(d) === 0) out.push([d]);
+      else out[out.length - 1]!.push(d);
+    }
+    return out;
+  }, [monthDates]);
+  const dates = weekIdx !== null ? (weeks[weekIdx] ?? monthDates) : monthDates;
   const slots = useMemo(() => {
     if (!cat.data) return [];
     const used = new Set((month.data?.occurrences ?? []).map((o) => o.slotId));
@@ -59,16 +65,21 @@ export const GridPage = () => {
   return (
     <div>
       <div className="row end">
-        <MonthNav year={ym.year} month={ym.month} onChange={(y, mo) => { setYm({ year: y, month: mo }); setWeekStart(null); }} />
+        <MonthNav year={ym.year} month={ym.month} onChange={(y, mo) => { setYm({ year: y, month: mo }); setWeekIdx(null); }} />
         <span className={`badge ${m.status === "DRAFT" ? "draft" : m.status === "PUBLISHED" ? "published" : ""}`}>
           {m.status === "NEEDS_DRAFT" ? t("status.noDraft") : m.status === "DRAFT" ? t("status.draft") : t("status.published")}
         </span>
       </div>
       <div className="row" style={{ margin: "10px 0" }}>
-        <button onClick={() => setWeekStart(weekStart ? null : addDays(daysInMonth(ym.year, ym.month)[0] ?? "", -weekdayIdx(daysInMonth(ym.year, ym.month)[0] ?? "")))}>
-          {weekStart ? t("grid.viewMonth") : t("grid.viewWeek")}
+        <button onClick={() => setWeekIdx(weekIdx !== null ? null : 0)}>
+          {weekIdx !== null ? t("grid.viewMonth") : t("grid.viewWeek")}
         </button>
-        {weekStart && <><button onClick={() => setWeekStart(addDays(weekStart, -7))}>{t("grid.prevWeek")}</button><button onClick={() => setWeekStart(addDays(weekStart, 7))}>{t("grid.nextWeek")}</button></>}
+        {weekIdx !== null && (
+          <>
+            <button disabled={weekIdx <= 0} onClick={() => setWeekIdx(Math.max(0, weekIdx - 1))}>{t("grid.prevWeek")}</button>
+            <button disabled={weekIdx >= weeks.length - 1} onClick={() => setWeekIdx(Math.min(weeks.length - 1, weekIdx + 1))}>{t("grid.nextWeek")}</button>
+          </>
+        )}
         <Link to="/necessidades"><button>{t("grid.matrix")}</button></Link>
         <button className="primary" disabled={!m.needsConfirmedAt || m.status === "PUBLISHED"}
           onClick={() => window.confirm(t("grid.generateConfirm")) && void act(async () => {
@@ -96,7 +107,7 @@ export const GridPage = () => {
           <thead>
             <tr>
               <th className="sl">{t("grid.slot")}</th>
-              {dates.map((d) => <th key={d} className={weekdayIdx(d) === 0 ? "we" : ""}>{weekStart ? fmtDate(d) : `${d.slice(8)} ${weekdayInitial(weekdayIdx(d))}`}</th>)}
+              {dates.map((d) => <th key={d} className={weekdayIdx(d) === 0 ? "we" : ""}>{weekIdx !== null ? fmtDate(d) : `${d.slice(8)} ${weekdayInitial(weekdayIdx(d))}`}</th>)}
             </tr>
           </thead>
           <tbody>

@@ -7,7 +7,12 @@ export const weekdayIdx = (iso: string): number => (new Date(`${iso}T00:00:00Z`)
 export const daysInMonth = (y: number, m: number): string[] =>
   Array.from({ length: new Date(Date.UTC(y, m, 0)).getUTCDate() }, (_, i) => `${y}-${String(m).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`);
 export const addDays = (iso: string, n: number): string => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
-export const today = (): string => new Date().toISOString().slice(0, 10);
+export const today = (): string =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Lisbon", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+export const currentYm = (): { year: number; month: number } => {
+  const [y, m] = today().split("-").map(Number) as [number, number];
+  return { year: y, month: m };
+};
 
 export const slotLabel = (s: Slot, c: Catalog): string => {
   const t = c.tours.find((x) => x.id === s.tourId)?.name ?? "?";

@@ -7,12 +7,9 @@ import { daysInMonth, fmtTime, weekdayIdx } from "../format";
 import { useI18n } from "../i18n";
 import type { MyItem } from "../types";
 
-const now = new Date();
-
 export const MySchedule = () => {
-  const [ym, setYm] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
+  const { cityId, city, ym, setYm } = useCity();
   const [view, setView] = useState<"list" | "cal">("list");
-  const { cityId, city } = useCity();
   const { t, fmtDate, languageName, weekdayInitial } = useI18n();
   const cat = useCatalog();
   const sched = useFetch<{ items: MyItem[] }>(`/me/schedule?year=${ym.year}&month=${ym.month}`);
@@ -22,10 +19,11 @@ export const MySchedule = () => {
   const items = sched.data?.items ?? [];
   const label = (i: MyItem) => {
     const s = c.slots.find((x) => x.id === i.slotId);
-    const t = c.tours.find((x) => x.id === s?.tourId)?.name ?? "?";
+    const tour = c.tours.find((x) => x.id === s?.tourId)?.name ?? "?";
     const lang = c.languages.find((x) => x.id === s?.languageId);
     const l = lang ? languageName(lang.code, lang.name) : "?";
-    return { time: s ? fmtTime(s.startMinutes) : "", text: `${t} · ${l}` };
+    const time = s ? fmtTime(s.startMinutes) : "";
+    return { time, text: `${tour} · ${l}`, short: `${time} ${tour} ${lang?.code ?? ""}`.trim() };
   };
   const dates = daysInMonth(ym.year, ym.month);
   const offset = weekdayIdx(dates[0] ?? "");
@@ -62,7 +60,7 @@ export const MySchedule = () => {
             return (
               <div key={d} className={`d ${day.some((i) => i.status === "ACTIVE") ? "has" : ""}`}>
                 <strong>{d.slice(8)}</strong>
-                {day.map((i) => <div key={i.occurrenceId}>{label(i).time}{i.status === "NO_DEMAND" ? ` ${t("nt")}` : ""}</div>)}
+                {day.map((i) => <div key={i.occurrenceId}>{label(i).short}{i.status === "NO_DEMAND" ? ` ${t("nt")}` : ""}</div>)}
               </div>
             );
           })}

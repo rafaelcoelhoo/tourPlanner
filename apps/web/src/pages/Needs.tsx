@@ -7,11 +7,9 @@ import { useCatalog, useFetch } from "../hooks";
 import { daysInMonth, errMsg, slotLabel, sortSlots, weekdayIdx } from "../format";
 
 interface NeedsData { status: string; confirmed: boolean; cells: { slotId: string; date: string; needed: number }[] }
-const now = new Date();
 
 export const NeedsPage = () => {
-  const [ym, setYm] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
-  const { cityId } = useCity();
+  const { cityId, ym, setYm } = useCity();
   const { t, weekdayInitial } = useI18n();
   const cat = useCatalog();
   const base = `/cities/${cityId}/months/${ym.year}/${ym.month}/needs`;

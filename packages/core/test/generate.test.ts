@@ -161,6 +161,27 @@ describe("geração", () => {
     const lim = guide("b", undefined, { restrictions: [{ weekday: 1, period: "FULL_DAY", notAfterMinutes: 17 * 60 }] });
     const r2 = run([m, t], [occ("m"), occ("t")], [lim]);
     expect(r2.assignments.map((a) => a.occurrenceId)).toEqual(["m@" + D1]);
+
+    // Restrição horária que bloqueia toda a manhã (ex.: só a partir das 14:00 às segundas) desconta 0.5 dia por segunda.
+    const afternoonOnlyOnMon = guide("c", undefined, {
+      restrictions: [{ weekday: 1, period: "FULL_DAY", notBeforeMinutes: 14 * 60 }],
+    });
+    const r3 = run([t], [occ("t")], [afternoonOnlyOnMon]);
+    // Novembro 2026 tem 5 segundas-feiras -> 30 - 5 * 0.5 = 27.5 dias disponíveis
+    expect(r3.stats[0]!.availableDays).toBe(27.5);
+  });
+
+  it("limite 'até às 16:00' é pela hora de início e inclusivo", () => {
+    const g = guide("a", undefined, { restrictions: [{ weekday: 1, period: "FULL_DAY", notAfterMinutes: 16 * 60 }] });
+    const at16 = slot("t16", "16:00");
+    const at1601 = slot("t1601", "16:01");
+    const at1530 = slot("t1530", "15:30");
+    const check = (s: SlotInfo) => checkAssignment(g, `${s.id}@${D1}`, s, D1, [], DEFAULT_SETTINGS).map((v) => v.code);
+    expect(check(at1530)).toEqual([]);
+    expect(check(at16)).toEqual([]);
+    expect(check(at1601)).toEqual(["RESTRICTION"]);
+    // 16:00 não bloqueia a tarde inteira, por isso o dia continua a contar como disponível.
+    expect(run([at16], [occ("t16")], [g]).stats[0]!.availableDays).toBe(30);
   });
 
   it("é determinístico e preserva atribuições bloqueadas", () => {

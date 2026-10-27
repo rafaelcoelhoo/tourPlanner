@@ -9,7 +9,7 @@ import { HttpError, toIso } from "../util";
 const dayTours = async (db: Tx | typeof prisma, cityId: string, guideId: string, date: Date): Promise<DayTour[]> => {
   const [rows, slots] = await Promise.all([
     db.assignment.findMany({
-      where: { guideId, withdrawn: false, occurrence: { date, status: "ACTIVE" } },
+      where: { guideId, withdrawn: false, occurrence: { date, status: "ACTIVE", needed: { gt: 0 } } },
       include: { occurrence: true },
     }),
     loadSlots(db, cityId),
@@ -28,7 +28,10 @@ export const assignmentRoutes = async (app: FastifyInstance): Promise<void> => {
     const body = z
       .object({ status: z.enum(["ACTIVE", "NO_DEMAND"]).optional(), note: z.string().max(300).nullable().optional(), needed: z.number().int().min(0).max(50).optional() })
       .parse(req.body);
-    return prisma.slotOccurrence.update({ where: { id }, data: body, select: { id: true, status: true, note: true, needed: true } });
+    return prisma.$transaction(async (tx) => {
+      if (body.needed === 0) await tx.assignment.deleteMany({ where: { occurrenceId: id } });
+      return tx.slotOccurrence.update({ where: { id }, data: body, select: { id: true, status: true, note: true, needed: true } });
+    });
   });
 
   app.get("/occurrences/:id/candidates", async (req) => {
@@ -36,7 +39,23 @@ export const assignmentRoutes = async (app: FastifyInstance): Promise<void> => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     const occ = await prisma.slotOccurrence.findUnique({ where: { id }, include: { slot: { include: { tour: true } }, assignments: true } });
     if (!occ) throw new HttpError(404, "Ocorrência não encontrada.");
-    const [guides, settings] = await Promise.all([loadGuides(prisma, occ.slot.tour.cityId), loadSettings(prisma)]);
+    const cityId = occ.slot.tour.cityId;
+    const [guides, settings, slots, dayRows] = await Promise.all([
+      loadGuides(prisma, cityId),
+      loadSettings(prisma),
+      loadSlots(prisma, cityId),
+      prisma.assignment.findMany({
+        where: { withdrawn: false, occurrence: { date: occ.date, status: "ACTIVE", needed: { gt: 0 }, slot: { tour: { cityId } } } },
+        include: { occurrence: true },
+      }),
+    ]);
+    const slotById = new Map(slots.map((s) => [s.id, s]));
+    const byGuide = new Map<string, DayTour[]>();
+    for (const r of dayRows) {
+      const s = slotById.get(r.occurrence.slotId);
+      if (!s) continue;
+      byGuide.set(r.guideId, [...(byGuide.get(r.guideId) ?? []), { occurrenceId: r.occurrenceId, slot: s }]);
+    }
     const slot = {
       id: occ.slot.id,
       tourId: occ.slot.tourId,
@@ -46,15 +65,14 @@ export const assignmentRoutes = async (app: FastifyInstance): Promise<void> => {
       durationMin: occ.slot.durationMin,
     };
     const taken = new Set(occ.assignments.filter((a) => !a.withdrawn).map((a) => a.guideId));
-    return Promise.all(
-      guides
-        .filter((g) => !taken.has(g.id))
-        .map(async (g) => ({
-          guideId: g.id,
-          name: g.name ?? "",
-          violations: checkAssignment(g, occ.id, slot, toIso(occ.date), await dayTours(prisma, occ.slot.tour.cityId, g.id, occ.date), settings),
-        })),
-    );
+    const dateIso = toIso(occ.date);
+    return guides
+      .filter((g) => !taken.has(g.id))
+      .map((g) => ({
+        guideId: g.id,
+        name: g.name ?? "",
+        violations: checkAssignment(g, occ.id, slot, dateIso, byGuide.get(g.id) ?? [], settings),
+      }));
   });
 
   app.post("/occurrences/:id/assignments", async (req) => {

@@ -12,14 +12,22 @@ export const DayPage = () => {
   const { cityId } = useCity();
   const { t, fmtDate } = useI18n();
   const cat = useCatalog();
-  const day = useFetch<{ date: string; occurrences: OccurrenceView[] }>(cityId ? `/cities/${cityId}/days/${date}` : null);
+  const day = useFetch<{ date: string; monthStatus: "NEEDS_DRAFT" | "DRAFT" | "PUBLISHED"; occurrences: OccurrenceView[] }>(cityId ? `/cities/${cityId}/days/${date}` : null);
   if (!cat.data) return <p className="center">{t("loading")}</p>;
   const c = cat.data;
   const occs = [...(day.data?.occurrences ?? [])].sort((a, b) => (c.slots.find((s) => s.id === a.slotId)?.startMinutes ?? 0) - (c.slots.find((s) => s.id === b.slotId)?.startMinutes ?? 0));
+  const ms = day.data?.monthStatus;
   return (
     <div>
-      <h1>{t("day.title")}</h1>
-      <div className="row">
+      <div className="row end">
+        <h1>{t("day.title")}</h1>
+        {ms && (
+          <span className={`badge ${ms === "DRAFT" ? "draft" : ms === "PUBLISHED" ? "published" : ""}`}>
+            {ms === "NEEDS_DRAFT" ? t("status.noDraft") : ms === "DRAFT" ? t("status.draft") : t("status.published")}
+          </span>
+        )}
+      </div>
+      <div className="row" style={{ marginBottom: 10 }}>
         <button onClick={() => setDate(addDays(date, -1))}>‹</button>
         <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
         <button onClick={() => setDate(addDays(date, 1))}>›</button>

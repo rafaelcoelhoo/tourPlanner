@@ -20,13 +20,14 @@ export const monthRoutes = async (app: FastifyInstance): Promise<void> => {
       include: { occurrences: { include: occInclude, orderBy: { date: "asc" } } },
     });
     if (!m) return { year, month, status: "NEEDS_DRAFT", needsConfirmedAt: null, publishedAt: null, occurrences: [], stats: [] };
-    const [occurrences, guides, slots, data] = await Promise.all([
+    const [occurrences, guides, slots, data, settings] = await Promise.all([
       buildViews(cityId, m.occurrences),
       loadGuides(prisma, cityId),
       loadSlots(prisma, cityId),
       loadMonth(prisma, cityId, year, month),
+      loadSettings(prisma),
     ]);
-    const stats = data ? computeStats(guides, slots, data.occurrences, data.assignments, data.dates) : [];
+    const stats = data ? computeStats(guides, slots, data.occurrences, data.assignments, data.dates, settings.morningCutoffMinutes) : [];
     const names = new Map(guides.map((g) => [g.id, g.name ?? ""]));
     return {
       year,
@@ -47,6 +48,7 @@ export const monthRoutes = async (app: FastifyInstance): Promise<void> => {
       prisma.tourSlot.findMany({ where: { active: true, tour: { cityId } } }),
     ]);
     const existing = new Map((m?.occurrences ?? []).map((o) => [`${o.slotId}|${toIso(o.date)}`, o]));
+    const slotsWithOccs = new Set((m?.occurrences ?? []).map((o) => o.slotId));
     const dates = Array.from({ length: new Date(Date.UTC(year, month, 0)).getUTCDate() }, (_, i) =>
       `${year}-${String(month).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`,
     );
@@ -54,7 +56,8 @@ export const monthRoutes = async (app: FastifyInstance): Promise<void> => {
       dates.flatMap((date) => {
         const o = existing.get(`${s.id}|${date}`);
         if (o) return [{ slotId: s.id, date, needed: o.needed, status: o.status }];
-        if (!m && s.weekdays.includes(weekdayOf(date))) return [{ slotId: s.id, date, needed: s.defaultNeeded, status: "ACTIVE" as const }];
+        if (!slotsWithOccs.has(s.id) && s.weekdays.includes(weekdayOf(date)))
+          return [{ slotId: s.id, date, needed: s.defaultNeeded, status: "ACTIVE" as const }];
         return [];
       }),
     );
@@ -79,7 +82,10 @@ export const monthRoutes = async (app: FastifyInstance): Promise<void> => {
       for (const c of body.cells) {
         const o = byKey.get(`${c.slotId}|${c.date}`);
         if (o) {
-          if (o.needed !== c.needed) await tx.slotOccurrence.update({ where: { id: o.id }, data: { needed: c.needed } });
+          if (o.needed !== c.needed) {
+            await tx.slotOccurrence.update({ where: { id: o.id }, data: { needed: c.needed } });
+            if (c.needed === 0) await tx.assignment.deleteMany({ where: { occurrenceId: o.id } });
+          }
         } else if (c.needed > 0) {
           await tx.slotOccurrence.create({ data: { monthId: m.id, slotId: c.slotId, date: fromIso(c.date), needed: c.needed } });
         }
@@ -140,12 +146,16 @@ export const monthRoutes = async (app: FastifyInstance): Promise<void> => {
   app.get("/cities/:cityId/days/:date", async (req) => {
     await requireAdmin(req);
     const { cityId, date } = z.object({ cityId: z.string(), date: isoDate }).parse(req.params);
-    const rows = await prisma.slotOccurrence.findMany({
-      where: { date: fromIso(date), needed: { gt: 0 }, slot: { tour: { cityId } } },
-      include: occInclude,
-      orderBy: { slot: { startMinutes: "asc" } },
-    });
-    return { date, occurrences: await buildViews(cityId, rows) };
+    const [y, mo] = date.split("-").map(Number) as [number, number];
+    const [rows, month] = await Promise.all([
+      prisma.slotOccurrence.findMany({
+        where: { date: fromIso(date), needed: { gt: 0 }, slot: { tour: { cityId } } },
+        include: occInclude,
+        orderBy: { slot: { startMinutes: "asc" } },
+      }),
+      prisma.monthSchedule.findUnique({ where: { cityId_year_month: { cityId, year: y, month: mo } }, select: { status: true } }),
+    ]);
+    return { date, monthStatus: month?.status ?? "NEEDS_DRAFT", occurrences: await buildViews(cityId, rows) };
   });
 
   app.get("/me/schedule", async (req) => {
@@ -155,6 +165,7 @@ export const monthRoutes = async (app: FastifyInstance): Promise<void> => {
     const rows = await prisma.slotOccurrence.findMany({
       where: {
         date: monthRange(year, month),
+        needed: { gt: 0 },
         month: { status: "PUBLISHED", cityId: u.cityId },
         assignments: { some: { guideId: u.id } },
       },

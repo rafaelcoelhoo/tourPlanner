@@ -35,9 +35,9 @@ export interface GenerateOutput {
 export const generateSchedule = (input: GenerateInput): GenerateOutput => {
   const { slots, occurrences, guides, dates, settings } = input;
   const slotById = new Map(slots.map((s) => [s.id, s]));
-  const weight = new Map(guides.map((g) => [g.id, availableDays(g, dates)]));
+  const weight = new Map(guides.map((g) => [g.id, availableDays(g, dates, settings.morningCutoffMinutes)]));
   const counts = new Map(guides.map((g) => [g.id, { primary: 0, secondary: 0 }]));
-  const active = occurrences.filter((o) => o.status === "ACTIVE" && slotById.has(o.slotId));
+  const active = occurrences.filter((o) => o.status === "ACTIVE" && o.needed > 0 && slotById.has(o.slotId));
   const activeIds = new Set(active.map((o) => o.id));
   const occById = new Map(active.map((o) => [o.id, o]));
 
@@ -118,5 +118,5 @@ export const generateSchedule = (input: GenerateInput): GenerateOutput => {
   }
 
   const all = [...(input.locked ?? []).filter((a) => !a.withdrawn), ...out];
-  return { assignments: out, incomplete, stats: computeStats(guides, slots, occurrences, all, dates) };
+  return { assignments: out, incomplete, stats: computeStats(guides, slots, occurrences, all, dates, settings.morningCutoffMinutes) };
 };

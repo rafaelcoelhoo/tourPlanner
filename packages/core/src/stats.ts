@@ -8,6 +8,7 @@ export const computeStats = (
   occurrences: OccurrenceInfo[],
   assignments: AssignmentInfo[],
   dates: IsoDate[],
+  morningCutoffMinutes = 13 * 60,
 ): GuideStats[] => {
   const slotById = new Map(slots.map((s) => [s.id, s]));
   const occById = new Map(occurrences.map((o) => [o.id, o]));
@@ -18,13 +19,13 @@ export const computeStats = (
     const o = occById.get(a.occurrenceId);
     const s = o && slotById.get(o.slotId);
     const c = counts.get(a.guideId);
-    if (!o || !s || !c || o.status !== "ACTIVE") continue;
+    if (!o || !s || !c || o.status !== "ACTIVE" || o.needed <= 0) continue;
     if (s.tourKind === "PRIMARY") c.primary++;
     else c.secondary++;
   }
   return guides.map((g) => {
     const c = counts.get(g.id) ?? { primary: 0, secondary: 0 };
-    const avail = availableDays(g, dates);
+    const avail = availableDays(g, dates, morningCutoffMinutes);
     return {
       guideId: g.id,
       ...c,

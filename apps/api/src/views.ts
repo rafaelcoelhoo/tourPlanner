@@ -35,7 +35,7 @@ export const buildViews = async (cityId: string, rows: OccRow[]): Promise<Occurr
   const byGuideDay = new Map<string, DayTour[]>();
   for (const o of rows) {
     const slot = slotById.get(o.slotId);
-    if (!slot || o.status !== "ACTIVE") continue;
+    if (!slot || o.status !== "ACTIVE" || o.needed <= 0) continue;
     for (const a of o.assignments) {
       if (a.withdrawn) continue;
       const k = `${a.guideId}|${toIso(o.date)}`;
@@ -45,7 +45,7 @@ export const buildViews = async (cityId: string, rows: OccRow[]): Promise<Occurr
   return rows.map((o) => {
     const slot = slotById.get(o.slotId);
     const date = toIso(o.date);
-    const active = o.status === "ACTIVE" ? o.assignments.filter((a) => !a.withdrawn).length : 0;
+    const active = o.status === "ACTIVE" && o.needed > 0 ? o.assignments.filter((a) => !a.withdrawn).length : 0;
     return {
       id: o.id,
       slotId: o.slotId,
@@ -56,15 +56,20 @@ export const buildViews = async (cityId: string, rows: OccRow[]): Promise<Occurr
       missing: o.status === "ACTIVE" ? Math.max(0, o.needed - active) : 0,
       assignments: o.assignments.map((a) => {
         const g = guideById.get(a.guideId);
-        const counts = !a.withdrawn && o.status === "ACTIVE";
+        const counts = !a.withdrawn && o.status === "ACTIVE" && o.needed > 0;
         const same = (byGuideDay.get(`${a.guideId}|${date}`) ?? []).filter((t) => t.occurrenceId !== o.id);
+        const warnings = counts
+          ? g && slot
+            ? checkAssignment(g, o.id, slot, date, same, settings)
+            : [{ code: "UNAVAILABLE" as const, message: "Guia inativo ou de outra cidade." }]
+          : [];
         return {
           id: a.id,
           guideId: a.guideId,
           guideName: a.guide.name,
           withdrawn: a.withdrawn,
           source: a.source,
-          warnings: counts && g && slot ? checkAssignment(g, o.id, slot, date, same, settings) : [],
+          warnings,
         };
       }),
     };

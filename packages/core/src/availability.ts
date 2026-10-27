@@ -30,24 +30,28 @@ export const blockReason = (
   return null;
 };
 
-const periodFree = (guide: GuideInfo, date: IsoDate, target: "MORNING" | "AFTERNOON"): boolean => {
+const periodFree = (guide: GuideInfo, date: IsoDate, target: "MORNING" | "AFTERNOON", cutoff: number): boolean => {
   const wd = weekdayOf(date);
   for (const u of guide.unavailabilities) {
     if (!u.slotId && inRange(date, u.startDate, u.endDate) && covers(u.period, target)) return false;
   }
   for (const r of guide.restrictions) {
+    if (r.weekday !== wd || !covers(r.period, target)) continue;
     const hasLimit = r.notBeforeMinutes != null || r.notAfterMinutes != null;
-    if (!hasLimit && r.weekday === wd && covers(r.period, target)) return false;
+    if (!hasLimit) return false;
+    if (target === "MORNING" && r.notBeforeMinutes != null && r.notBeforeMinutes >= cutoff) return false;
+    if (target === "AFTERNOON" && r.notAfterMinutes != null && r.notAfterMinutes < cutoff) return false;
+    if (r.notBeforeMinutes != null && r.notAfterMinutes != null && r.notBeforeMinutes > r.notAfterMinutes) return false;
   }
   return true;
 };
 
 /** Peso de disponibilidade do dia: 1 = livre, 0.5 = um período bloqueado, 0 = bloqueado. */
-export const dayWeight = (guide: GuideInfo, date: IsoDate): number =>
-  ((periodFree(guide, date, "MORNING") ? 1 : 0) + (periodFree(guide, date, "AFTERNOON") ? 1 : 0)) / 2;
+export const dayWeight = (guide: GuideInfo, date: IsoDate, cutoff = 13 * 60): number =>
+  ((periodFree(guide, date, "MORNING", cutoff) ? 1 : 0) + (periodFree(guide, date, "AFTERNOON", cutoff) ? 1 : 0)) / 2;
 
-export const availableDays = (guide: GuideInfo, dates: IsoDate[]): number =>
-  dates.reduce((s, d) => s + dayWeight(guide, d), 0);
+export const availableDays = (guide: GuideInfo, dates: IsoDate[], cutoff = 13 * 60): number =>
+  dates.reduce((s, d) => s + dayWeight(guide, d, cutoff), 0);
 
 export const isQualified = (guide: GuideInfo, slot: SlotInfo): boolean =>
   guide.qualifications.some((q) => q.tourId === slot.tourId && q.languageId === slot.languageId);

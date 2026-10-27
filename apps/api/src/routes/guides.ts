@@ -4,7 +4,36 @@ import { prisma } from "../db";
 import { requireAdmin, requireSelfOrAdmin } from "../auth";
 import { env } from "../env";
 import { issueReset } from "../reset";
-import { HttpError, fromIso, newToken, sha256, toIso } from "../util";
+import { HttpError, fromIso, newToken, sha256, toIso, todayLisbon } from "../util";
+
+const monthsBetween = (startIso: string, endIso: string): { year: number; month: number }[] => {
+  const [sy, sm] = startIso.split("-").map(Number) as [number, number];
+  const [ey, em] = endIso.split("-").map(Number) as [number, number];
+  const out: { year: number; month: number }[] = [];
+  let y = sy;
+  let m = sm;
+  while (y < ey || (y === ey && m <= em)) {
+    out.push({ year: y, month: m });
+    m++;
+    if (m > 12) {
+      m = 1;
+      y++;
+    }
+  }
+  return out;
+};
+
+const assertNotPublishedForGuide = async (role: "ADMIN" | "GUIDE", guideId: string, startIso: string, endIso: string): Promise<void> => {
+  if (role === "ADMIN") return;
+  const user = await prisma.user.findUnique({ where: { id: guideId }, select: { cityId: true } });
+  if (!user?.cityId) return;
+  const yms = monthsBetween(startIso, endIso);
+  const pub = await prisma.monthSchedule.findFirst({
+    where: { cityId: user.cityId, status: "PUBLISHED", OR: yms },
+    select: { id: true },
+  });
+  if (pub) throw new HttpError(409, "O horário deste mês já foi publicado. Contacte o administrador para alterar disponibilidades.");
+};
 
 const idParam = z.object({ id: z.string() });
 const period = z.enum(["MORNING", "AFTERNOON", "FULL_DAY"]);
@@ -71,7 +100,15 @@ export const guideRoutes = async (app: FastifyInstance): Promise<void> => {
     const u = await prisma.user.findUnique({ where: { id } });
     if (!u || u.role !== "GUIDE") throw new HttpError(404, "Guia não encontrado.");
     if (body.status === "ACTIVE" && !u.passwordHash) throw new HttpError(400, "O guia ainda não ativou a conta.");
-    return prisma.user.update({ where: { id }, data: body, select: { id: true, name: true, status: true } });
+    return prisma.$transaction(async (tx) => {
+      if (body.status === "DISABLED") {
+        await tx.session.deleteMany({ where: { userId: id } });
+        await tx.assignment.deleteMany({
+          where: { guideId: id, withdrawn: false, occurrence: { date: { gte: fromIso(todayLisbon()) } } },
+        });
+      }
+      return tx.user.update({ where: { id }, data: body, select: { id: true, name: true, status: true } });
+    });
   });
 
   app.get("/guides/:id/profile", async (req) => {
@@ -109,6 +146,9 @@ export const guideRoutes = async (app: FastifyInstance): Promise<void> => {
     await prisma.$transaction([
       prisma.guideQualification.deleteMany({ where: { userId: id } }),
       prisma.unavailability.deleteMany({ where: { userId: id, slotId: { not: null } } }),
+      prisma.assignment.deleteMany({
+        where: { guideId: id, withdrawn: false, occurrence: { date: { gte: fromIso(todayLisbon()) } } },
+      }),
       prisma.user.update({ where: { id }, data: { cityId } }),
     ]);
     return { ok: true };
@@ -131,11 +171,12 @@ export const guideRoutes = async (app: FastifyInstance): Promise<void> => {
 
   app.post("/guides/:id/unavailabilities", async (req) => {
     const { id } = idParam.parse(req.params);
-    await requireSelfOrAdmin(req, id);
+    const u = await requireSelfOrAdmin(req, id);
     const body = z
       .object({ startDate: isoDate, endDate: isoDate, period: period.default("FULL_DAY"), slotId: z.string().nullish(), note: z.string().max(200).nullish() })
       .refine((b) => b.endDate >= b.startDate, "A data final não pode ser anterior à inicial.")
       .parse(req.body);
+    await assertNotPublishedForGuide(u.role, id, body.startDate, body.endDate);
     if (body.slotId) {
       const slot = await prisma.tourSlot.findUnique({ where: { id: body.slotId }, include: { tour: true } });
       const user = await prisma.user.findUnique({ where: { id } });
@@ -149,7 +190,9 @@ export const guideRoutes = async (app: FastifyInstance): Promise<void> => {
 
   app.delete("/guides/:id/unavailabilities/:itemId", async (req) => {
     const { id, itemId } = z.object({ id: z.string(), itemId: z.string() }).parse(req.params);
-    await requireSelfOrAdmin(req, id);
+    const u = await requireSelfOrAdmin(req, id);
+    const existing = await prisma.unavailability.findFirst({ where: { id: itemId, userId: id } });
+    if (existing) await assertNotPublishedForGuide(u.role, id, toIso(existing.startDate), toIso(existing.endDate));
     await prisma.unavailability.deleteMany({ where: { id: itemId, userId: id } });
     return { ok: true };
   });
