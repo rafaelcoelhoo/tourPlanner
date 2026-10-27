@@ -50,14 +50,37 @@ Guloso dia a dia. Em cada passo escolhe a ocorrência com menos candidatos eleg�
 
 Limitações: sem backtracking nem lookahead entre dias (um guia pode ser "gasto" num dia em que outro slot do dia seguinte só ele cobre); não usa histórico de meses anteriores; resultado dependente da ordem diária. Melhoria prevista: pesquisa local (trocas entre guias) para reduzir a variância dos rácios.
 
-## Deploy
+## Deploy (Netlify + Render + Neon)
 
-**Backend (Render ou Railway)**
-- Root: `apps/api`; build: `npm install && npx prisma generate`; start: `npx prisma migrate deploy && npm start`
-- Base de dados PostgreSQL gerida; variáveis: `DATABASE_URL`, `WEB_ORIGIN` (URL do frontend), `PORT`, `COOKIE_SECURE=true`.
-- Criar o admin uma vez: `npm run seed:admin` com `ADMIN_EMAIL` e `ADMIN_PASSWORD`.
+Tudo tem plano gratuito. Limitações do gratuito: o backend no Render adormece após 15 min sem pedidos (o primeiro pedido seguinte demora ~1 min); o Neon suspende após 5 min mas acorda em milissegundos. O plano pago mais barato do Render (Starter, ~7 USD/mês) elimina o adormecer.
 
-**Frontend (Vercel)**
-- Root: `apps/web`; build: `npm run build`; output: `dist`.
-- Em `apps/web/vercel.json` substituir `SEU-BACKEND.onrender.com` pelo URL do backend. O rewrite `/api/*` mantém tudo no mesmo domínio, por isso os cookies funcionam sem `SameSite=None`.
-- Como o workspace usa `@schedule/core`, definir na Vercel o root como a raiz do repositório com install `npm install` e build `npm run build -w @schedule/web` (output `apps/web/dist`) se o root `apps/web` não resolver o workspace.
+### 1. Base de dados (Neon)
+1. Criar um projeto em neon.com (região UE, ex.: Frankfurt).
+2. Copiar duas ligações: a **com pooler** (host com `-pooler`) para `DATABASE_URL` e a **direta** para `DIRECT_URL`. Usar `?sslmode=require` em ambas.
+3. Popular a base a partir do teu computador (cria cidades, tours, idiomas e o admin):
+   ```bash
+   cd apps/api
+   DATABASE_URL="<pooler>" DIRECT_URL="<direta>" npx prisma migrate deploy
+   DATABASE_URL="<pooler>" DIRECT_URL="<direta>" ADMIN_EMAIL=admin@empresa.pt ADMIN_PASSWORD="<forte>" npm run seed:admin
+   # Só para demonstração (guias e horários fictícios, palavra-passe dos guias guia12345):
+   DATABASE_URL="<pooler>" DIRECT_URL="<direta>" npm run seed
+   ```
+
+### 2. Backend (Render)
+1. New → Blueprint, ligar este repositório do GitHub (usa `render.yaml`) ou criar um Web Service manualmente com:
+   - Build: `npm ci --include=dev && npm run build -w @schedule/api`
+   - Start: `npm run start:prod -w @schedule/api` (corre as migrações e arranca)
+   - Health check: `/health`
+2. Variáveis: `DATABASE_URL`, `DIRECT_URL` (as do Neon), `WEB_ORIGIN` (endereço do Netlify, ex.: `https://nome.netlify.app`), `COOKIE_SECURE=true`, `COOKIE_SAMESITE=lax`, `MAIL_TRANSPORT=console` (ver "Recuperação de palavra-passe" para emails reais).
+3. Anotar o endereço do serviço (`https://nome.onrender.com`).
+
+### 3. Frontend (Netlify)
+1. Add new site → Import from Git, escolher o repositório. O `netlify.toml` na raiz define build e pasta de publicação.
+2. Em `netlify.toml`, substituir `SEU-BACKEND.onrender.com` pelo endereço do Render e fazer commit. O reencaminhamento `/api/*` mantém o backend no mesmo domínio, por isso os cookies de sessão funcionam.
+3. Confirmar `WEB_ORIGIN` no Render (os links de convite usam este endereço).
+
+### Notas
+- O plano gratuito do Render adormece: abrir a app 1-2 minutos antes de uma demonstração, ou usar o plano Starter.
+- Reencaminhamentos do Netlify têm um limite de tempo por pedido (cerca de 26 s): se o backend estiver adormecido, o primeiro pedido pode falhar; basta recarregar.
+- Os dados de demonstração não devem ficar numa base com dados reais.
+- O ficheiro `apps/web/vercel.json` serve para quem preferir a Vercel.

@@ -1,0 +1,19 @@
+[build]
+  command = "npm ci && npm run build -w @schedule/web"
+  publish = "apps/web/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Mantém o backend no mesmo domínio (cookies de sessão sem problemas de terceiros).
+# Substituir pelo endereço real do serviço no Render.
+[[redirects]]
+  from = "/api/*"
+  to = "https://SEU-BACKEND.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
