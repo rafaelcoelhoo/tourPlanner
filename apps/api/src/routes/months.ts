@@ -1,0 +1,180 @@
+import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { computeStats, generateSchedule, weekdayOf } from "@schedule/core";
+import { prisma } from "../db";
+import { requireAdmin, requireUser } from "../auth";
+import { loadGuides, loadMonth, loadSettings, loadSlots, monthRange } from "../context";
+import { buildViews, occInclude } from "../views";
+import { HttpError, fromIso, toIso } from "../util";
+
+const ymOnly = z.object({ year: z.coerce.number().int().min(2020).max(2100), month: z.coerce.number().int().min(1).max(12) });
+const ym = ymOnly.extend({ cityId: z.string() });
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+export const monthRoutes = async (app: FastifyInstance): Promise<void> => {
+  app.get("/cities/:cityId/months/:year/:month", async (req) => {
+    await requireAdmin(req);
+    const { cityId, year, month } = ym.parse(req.params);
+    const m = await prisma.monthSchedule.findUnique({
+      where: { cityId_year_month: { cityId, year, month } },
+      include: { occurrences: { include: occInclude, orderBy: { date: "asc" } } },
+    });
+    if (!m) return { year, month, status: "NEEDS_DRAFT", needsConfirmedAt: null, publishedAt: null, occurrences: [], stats: [] };
+    const [occurrences, guides, slots, data] = await Promise.all([
+      buildViews(cityId, m.occurrences),
+      loadGuides(prisma, cityId),
+      loadSlots(prisma, cityId),
+      loadMonth(prisma, cityId, year, month),
+    ]);
+    const stats = data ? computeStats(guides, slots, data.occurrences, data.assignments, data.dates) : [];
+    const names = new Map(guides.map((g) => [g.id, g.name ?? ""]));
+    return {
+      year,
+      month,
+      status: m.status,
+      needsConfirmedAt: m.needsConfirmedAt,
+      publishedAt: m.publishedAt,
+      occurrences,
+      stats: stats.map((s) => ({ ...s, name: names.get(s.guideId) ?? "" })),
+    };
+  });
+
+  app.get("/cities/:cityId/months/:year/:month/needs", async (req) => {
+    await requireAdmin(req);
+    const { cityId, year, month } = ym.parse(req.params);
+    const [m, slots] = await Promise.all([
+      prisma.monthSchedule.findUnique({ where: { cityId_year_month: { cityId, year, month } }, include: { occurrences: true } }),
+      prisma.tourSlot.findMany({ where: { active: true, tour: { cityId } } }),
+    ]);
+    const existing = new Map((m?.occurrences ?? []).map((o) => [`${o.slotId}|${toIso(o.date)}`, o]));
+    const dates = Array.from({ length: new Date(Date.UTC(year, month, 0)).getUTCDate() }, (_, i) =>
+      `${year}-${String(month).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`,
+    );
+    const cells = slots.flatMap((s) =>
+      dates.flatMap((date) => {
+        const o = existing.get(`${s.id}|${date}`);
+        if (o) return [{ slotId: s.id, date, needed: o.needed, status: o.status }];
+        if (!m && s.weekdays.includes(weekdayOf(date))) return [{ slotId: s.id, date, needed: s.defaultNeeded, status: "ACTIVE" as const }];
+        return [];
+      }),
+    );
+    return { year, month, status: m?.status ?? "NEEDS_DRAFT", confirmed: Boolean(m?.needsConfirmedAt), cells };
+  });
+
+  app.put("/cities/:cityId/months/:year/:month/needs", async (req) => {
+    await requireAdmin(req);
+    const { cityId, year, month } = ym.parse(req.params);
+    const body = z
+      .object({
+        confirm: z.boolean().default(false),
+        cells: z.array(z.object({ slotId: z.string(), date: isoDate, needed: z.number().int().min(0).max(50) })),
+      })
+      .parse(req.body);
+    const prefix = `${year}-${String(month).padStart(2, "0")}-`;
+    if (body.cells.some((c) => !c.date.startsWith(prefix))) throw new HttpError(400, "Data fora do mês.");
+    await prisma.$transaction(async (tx) => {
+      const m = await tx.monthSchedule.upsert({ where: { cityId_year_month: { cityId, year, month } }, update: {}, create: { cityId, year, month } });
+      const existing = await tx.slotOccurrence.findMany({ where: { monthId: m.id } });
+      const byKey = new Map(existing.map((o) => [`${o.slotId}|${toIso(o.date)}`, o]));
+      for (const c of body.cells) {
+        const o = byKey.get(`${c.slotId}|${c.date}`);
+        if (o) {
+          if (o.needed !== c.needed) await tx.slotOccurrence.update({ where: { id: o.id }, data: { needed: c.needed } });
+        } else if (c.needed > 0) {
+          await tx.slotOccurrence.create({ data: { monthId: m.id, slotId: c.slotId, date: fromIso(c.date), needed: c.needed } });
+        }
+      }
+      if (body.confirm) await tx.monthSchedule.update({ where: { id: m.id }, data: { needsConfirmedAt: new Date() } });
+    });
+    return { ok: true };
+  });
+
+  app.post("/cities/:cityId/months/:year/:month/generate", async (req) => {
+    await requireAdmin(req);
+    const { cityId, year, month } = ym.parse(req.params);
+    return prisma.$transaction(async (tx) => {
+      const m = await tx.monthSchedule.findUnique({ where: { cityId_year_month: { cityId, year, month } } });
+      if (!m?.needsConfirmedAt) throw new HttpError(409, "Confirme primeiro a matriz de necessidades.");
+      if (m.status === "PUBLISHED") throw new HttpError(409, "Mês já publicado. Despublique antes de gerar novamente.");
+      await tx.assignment.deleteMany({ where: { source: "GENERATED", occurrence: { monthId: m.id } } });
+      const [data, guides, slots, settings] = await Promise.all([
+        loadMonth(tx, cityId, year, month),
+        loadGuides(tx, cityId),
+        loadSlots(tx, cityId),
+        loadSettings(tx),
+      ]);
+      if (!data) throw new HttpError(409, "Sem dados do mês.");
+      const result = generateSchedule({
+        slots,
+        occurrences: data.occurrences,
+        guides,
+        dates: data.dates,
+        settings,
+        locked: data.assignments.filter((a) => !a.withdrawn),
+      });
+      await tx.assignment.createMany({
+        data: result.assignments.map((a) => ({ occurrenceId: a.occurrenceId, guideId: a.guideId, source: "GENERATED" as const })),
+      });
+      await tx.monthSchedule.update({ where: { id: m.id }, data: { status: "DRAFT", generatedAt: new Date() } });
+      return {
+        assigned: result.assignments.length,
+        incomplete: result.incomplete,
+        missingTotal: result.incomplete.reduce((s, i) => s + i.missing, 0),
+      };
+    });
+  });
+
+  app.post("/cities/:cityId/months/:year/:month/publish", async (req) => {
+    await requireAdmin(req);
+    const { cityId, year, month } = ym.parse(req.params);
+    const body = z.object({ publish: z.boolean().default(true) }).parse(req.body ?? {});
+    const m = await prisma.monthSchedule.findUnique({ where: { cityId_year_month: { cityId, year, month } } });
+    if (!m || m.status === "NEEDS_DRAFT") throw new HttpError(409, "Gere um rascunho antes de publicar.");
+    await prisma.monthSchedule.update({
+      where: { id: m.id },
+      data: body.publish ? { status: "PUBLISHED", publishedAt: new Date() } : { status: "DRAFT", publishedAt: null },
+    });
+    return { ok: true };
+  });
+
+  app.get("/cities/:cityId/days/:date", async (req) => {
+    await requireAdmin(req);
+    const { cityId, date } = z.object({ cityId: z.string(), date: isoDate }).parse(req.params);
+    const rows = await prisma.slotOccurrence.findMany({
+      where: { date: fromIso(date), needed: { gt: 0 }, slot: { tour: { cityId } } },
+      include: occInclude,
+      orderBy: { slot: { startMinutes: "asc" } },
+    });
+    return { date, occurrences: await buildViews(cityId, rows) };
+  });
+
+  app.get("/me/schedule", async (req) => {
+    const u = await requireUser(req);
+    const { year, month } = ymOnly.parse(req.query);
+    if (!u.cityId) return { year, month, items: [] };
+    const rows = await prisma.slotOccurrence.findMany({
+      where: {
+        date: monthRange(year, month),
+        month: { status: "PUBLISHED", cityId: u.cityId },
+        assignments: { some: { guideId: u.id } },
+      },
+      include: { assignments: { include: { guide: { select: { id: true, name: true } } } } },
+      orderBy: [{ date: "asc" }, { slot: { startMinutes: "asc" } }],
+    });
+    const items = rows.flatMap((o) => {
+      const mine = o.assignments.find((a) => a.guideId === u.id);
+      if (!mine || (mine.withdrawn && o.status === "ACTIVE")) return [];
+      return [
+        {
+          occurrenceId: o.id,
+          slotId: o.slotId,
+          date: toIso(o.date),
+          status: o.status,
+          note: o.note,
+          colleagues: o.assignments.filter((a) => !a.withdrawn && a.guideId !== u.id).map((a) => a.guide.name),
+        },
+      ];
+    });
+    return { year, month, items };
+  });
+};

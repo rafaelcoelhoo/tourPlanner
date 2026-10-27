@@ -1,0 +1,12 @@
+{
+  "name": "schedule-system",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev:api": "npm run dev -w @schedule/api",
+    "dev:web": "npm run dev -w @schedule/web",
+    "test": "npm run test -w @schedule/core",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:up": "docker compose up -d db"
+  }
+}

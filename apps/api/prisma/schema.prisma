@@ -1,0 +1,219 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  GUIDE
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+enum TourKind {
+  PRIMARY
+  SECONDARY
+}
+
+enum Period {
+  MORNING
+  AFTERNOON
+  FULL_DAY
+}
+
+enum OccurrenceStatus {
+  ACTIVE
+  NO_DEMAND
+}
+
+enum MonthStatus {
+  NEEDS_DRAFT
+  DRAFT
+  PUBLISHED
+}
+
+enum AssignmentSource {
+  GENERATED
+  MANUAL
+}
+
+model City {
+  id      String          @id @default(cuid())
+  name    String          @unique
+  tours   Tour[]
+  users   User[]
+  months  MonthSchedule[]
+}
+
+model User {
+  id                    String                 @id @default(cuid())
+  cityId                String?
+  city                  City?                  @relation(fields: [cityId], references: [id])
+  email                 String                 @unique
+  name                  String
+  phone                 String?
+  role                  Role
+  status                UserStatus             @default(INVITED)
+  passwordHash          String?
+  createdAt             DateTime               @default(now())
+  sessions              Session[]
+  invite                Invite?
+  qualifications        GuideQualification[]
+  unavailabilities      Unavailability[]
+  recurringRestrictions RecurringRestriction[]
+  assignments           Assignment[]
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+
+  @@index([userId])
+}
+
+model Invite {
+  id        String    @id @default(cuid())
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+}
+
+model Language {
+  id             String               @id @default(cuid())
+  code           String               @unique
+  name           String
+  slots          TourSlot[]
+  qualifications GuideQualification[]
+}
+
+model Tour {
+  id             String               @id @default(cuid())
+  cityId         String
+  city           City                 @relation(fields: [cityId], references: [id])
+  name           String
+  kind           TourKind
+  active         Boolean              @default(true)
+  slots          TourSlot[]
+  qualifications GuideQualification[]
+
+  @@unique([cityId, name])
+}
+
+model TourSlot {
+  id               String           @id @default(cuid())
+  tourId           String
+  tour             Tour             @relation(fields: [tourId], references: [id])
+  languageId       String
+  language         Language         @relation(fields: [languageId], references: [id])
+  startMinutes     Int
+  durationMin      Int              @default(150)
+  weekdays         Int[]
+  defaultNeeded    Int              @default(1)
+  active           Boolean          @default(true)
+  occurrences      SlotOccurrence[]
+  unavailabilities Unavailability[]
+
+  @@unique([tourId, languageId, startMinutes])
+}
+
+model GuideQualification {
+  userId     String
+  tourId     String
+  languageId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tour       Tour     @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tourId, languageId])
+}
+
+model Unavailability {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startDate DateTime  @db.Date
+  endDate   DateTime  @db.Date
+  period    Period    @default(FULL_DAY)
+  slotId    String?
+  slot      TourSlot? @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  note      String?
+
+  @@index([userId, startDate, endDate])
+}
+
+model RecurringRestriction {
+  id               String @id @default(cuid())
+  userId           String
+  user             User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekday          Int
+  period           Period @default(FULL_DAY)
+  notBeforeMinutes Int?
+  notAfterMinutes  Int?
+}
+
+model Settings {
+  id                   Int @id @default(1)
+  morningCutoffMinutes Int @default(780)
+  minGapMinutes        Int @default(60)
+  maxToursPerDay       Int @default(2)
+  defaultDurationMin   Int @default(150)
+}
+
+model MonthSchedule {
+  id               String           @id @default(cuid())
+  cityId           String
+  city             City             @relation(fields: [cityId], references: [id])
+  year             Int
+  month            Int
+  needsConfirmedAt DateTime?
+  status           MonthStatus      @default(NEEDS_DRAFT)
+  publishedAt      DateTime?
+  generatedAt      DateTime?
+  occurrences      SlotOccurrence[]
+
+  @@unique([cityId, year, month])
+}
+
+model SlotOccurrence {
+  id          String           @id @default(cuid())
+  monthId     String
+  month       MonthSchedule    @relation(fields: [monthId], references: [id], onDelete: Cascade)
+  slotId      String
+  slot        TourSlot         @relation(fields: [slotId], references: [id])
+  date        DateTime         @db.Date
+  status      OccurrenceStatus @default(ACTIVE)
+  needed      Int
+  note        String?
+  assignments Assignment[]
+
+  @@unique([slotId, date])
+  @@index([monthId, date])
+}
+
+model Assignment {
+  id               String           @id @default(cuid())
+  occurrenceId     String
+  occurrence       SlotOccurrence   @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  guideId          String
+  guide            User             @relation(fields: [guideId], references: [id])
+  withdrawn        Boolean          @default(false)
+  withdrawnAt      DateTime?
+  source           AssignmentSource @default(GENERATED)
+  overrideWarnings Json?
+  createdAt        DateTime         @default(now())
+
+  @@index([guideId])
+  @@index([occurrenceId])
+}
