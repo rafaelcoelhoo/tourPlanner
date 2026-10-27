@@ -23,6 +23,8 @@ export const ProfilePage = () => {
   const cat = useCatalog(prof.data ? prof.data.cityId : null);
   const [msg, setMsg] = useState("");
   const [un, setUn] = useState({ startDate: "", endDate: "", period: "FULL_DAY" as Period, slotId: "" });
+  const [pw, setPw] = useState({ current: "", next: "" });
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [rs, setRs] = useState({ weekday: 1, kind: "FULL_DAY" as RestrictionKind, time: "17:00" });
   const run = async (fn: () => Promise<unknown>) => {
     setMsg("");
@@ -87,6 +89,16 @@ export const ProfilePage = () => {
       }),
     );
   };
+  const changePw = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await post("/auth/password", pw);
+      setPw({ current: "", next: "" });
+      setPwMsg({ ok: true, text: tr("pw.done") });
+    } catch (err) {
+      setPwMsg({ ok: false, text: errMsg(err) });
+    }
+  };
   const slotName = (sid: string) => {
     const s = c.slots.find((x) => x.id === sid);
     return s ? slotLabel(s, c) : "?";
@@ -148,6 +160,17 @@ export const ProfilePage = () => {
           ))}
         </div>
       </div>
+      {id === me?.id && (
+        <form className="card" onSubmit={(e) => void changePw(e)}>
+          <h2>{tr("pw.title")}</h2>
+          <div className="row">
+            <label>{tr("pw.current")}<input type="password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} required autoComplete="current-password" /></label>
+            <label>{tr("pw.next")}<input type="password" minLength={8} value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} required autoComplete="new-password" /></label>
+            <button className="primary">{tr("pw.submit")}</button>
+          </div>
+          {pwMsg && <p className={pwMsg.ok ? "ok" : "error"}>{pwMsg.text}</p>}
+        </form>
+      )}
     </div>
   );
 };

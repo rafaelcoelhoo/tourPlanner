@@ -21,10 +21,9 @@ declare module "fastify" {
   }
 }
 
-export const createSession = async (userId: string, reply: FastifyReply): Promise<void> => {
-  const token = newToken();
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000);
-  await prisma.session.create({ data: { id: sha256(token), userId, expiresAt } });
+const DAY_MS = 86_400_000;
+
+const setSessionCookie = (reply: FastifyReply, token: string, expiresAt: Date): void => {
   reply.setCookie(COOKIE, token, {
     httpOnly: true,
     path: "/",
@@ -34,17 +33,31 @@ export const createSession = async (userId: string, reply: FastifyReply): Promis
   });
 };
 
+export const createSession = async (userId: string, reply: FastifyReply): Promise<void> => {
+  const token = newToken();
+  const expiresAt = new Date(Date.now() + SESSION_DAYS * DAY_MS);
+  await prisma.session.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+  await prisma.session.create({ data: { id: sha256(token), userId, expiresAt } });
+  setSessionCookie(reply, token, expiresAt);
+};
+
 export const destroySession = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
   const token = req.cookies[COOKIE];
   if (token) await prisma.session.deleteMany({ where: { id: sha256(token) } });
   reply.clearCookie(COOKIE, { path: "/" });
 };
 
-export const loadUser = async (req: FastifyRequest): Promise<void> => {
+/** Sessão deslizante: expira só após SESSION_DAYS sem utilização (renovada no máximo uma vez por dia). */
+export const loadUser = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
   const token = req.cookies[COOKIE];
   if (!token) return;
   const s = await prisma.session.findUnique({ where: { id: sha256(token) }, include: { user: true } });
   if (!s || s.expiresAt < new Date() || s.user.status !== "ACTIVE") return;
+  if (s.expiresAt.getTime() - Date.now() < (SESSION_DAYS - 1) * DAY_MS) {
+    const expiresAt = new Date(Date.now() + SESSION_DAYS * DAY_MS);
+    await prisma.session.update({ where: { id: s.id }, data: { expiresAt } });
+    setSessionCookie(reply, token, expiresAt);
+  }
   req.user = { id: s.user.id, email: s.user.email, name: s.user.name, role: s.user.role, cityId: s.user.cityId };
 };
 

@@ -66,6 +66,7 @@ model User {
   createdAt             DateTime               @default(now())
   sessions              Session[]
   invite                Invite?
+  passwordResets        PasswordReset[]
   qualifications        GuideQualification[]
   unavailabilities      Unavailability[]
   recurringRestrictions RecurringRestriction[]
@@ -88,6 +89,17 @@ model Invite {
   tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
+}
+
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  @@index([userId])
 }
 
 model Language {

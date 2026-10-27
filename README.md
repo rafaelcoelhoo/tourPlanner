@@ -28,6 +28,15 @@ Cidades: o admin escolhe a cidade no topo (Porto, Lisboa, Braga, Coimbra, Guimar
 Fluxo do admin: **Matriz** (confirmar necessidades) → **Grelha** (Gerar rascunho, editar células, Publicar) → **Dia** (confirmação diária, NT, notas, retirar guias).
 Guias novos: **Guias** → Convidar → copiar link de ativação (7 dias) e enviar por WhatsApp.
 
+## Recuperação de palavra-passe
+
+- O guia usa "Esqueci-me da palavra-passe" no login: recebe um link por email (válido 1 hora, uso único) e escolhe a nova palavra-passe. Terminar a recuperação encerra as outras sessões.
+- O admin também pode gerar um link em **Guias** → *Link de redefinição* e enviá-lo por WhatsApp.
+- Localmente (`MAIL_TRANSPORT=console`, por defeito) o email não é enviado: o texto, com o link, aparece no terminal da API.
+- Em produção: `MAIL_TRANSPORT=resend`, `RESEND_API_KEY` e `MAIL_FROM` (remetente de um domínio verificado no Resend). Plano gratuito: 3000 emails/mês, 100/dia.
+- Pedidos de login, recuperação e ativação têm limite de tentativas por IP (`@fastify/rate-limit`, em memória; com várias instâncias do backend passa a ser por instância).
+- Admin que perca a palavra-passe: no servidor, `ADMIN_EMAIL=... ADMIN_PASSWORD=nova ADMIN_RESET_PASSWORD=true npm run seed:admin -w @schedule/api`.
+
 ## Testes e verificação
 
 ```bash

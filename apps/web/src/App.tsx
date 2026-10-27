@@ -2,7 +2,7 @@ import { Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
 import { useCity } from "./city";
 import { LanguageSelect, useI18n, type Key } from "./i18n";
-import { Login, Activate } from "./pages/Login";
+import { Login, Activate, Forgot, ResetPassword } from "./pages/Login";
 import { GridPage } from "./pages/Grid";
 import { NeedsPage } from "./pages/Needs";
 import { DayPage } from "./pages/Day";
@@ -61,6 +61,8 @@ export const App = () => {
     <Routes>
       <Route path="/login" element={me ? <Home /> : <Login />} />
       <Route path="/ativar/:token" element={<Activate />} />
+      <Route path="/recuperar" element={<Forgot />} />
+      <Route path="/redefinir/:token" element={<ResetPassword />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         {admin ? (

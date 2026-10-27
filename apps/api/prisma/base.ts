@@ -41,7 +41,7 @@ export const seedBase = async (prisma: PrismaClient): Promise<void> => {
   const passwordHash = await argon2.hash(password);
   await prisma.user.upsert({
     where: { email },
-    update: {},
+    update: process.env.ADMIN_RESET_PASSWORD === "true" ? { passwordHash } : {},
     create: { email, name: "Administrador", role: "ADMIN", status: "ACTIVE", passwordHash },
   });
   console.log(`Admin: ${email}`);

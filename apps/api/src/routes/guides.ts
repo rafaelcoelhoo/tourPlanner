@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db";
 import { requireAdmin, requireSelfOrAdmin } from "../auth";
 import { env } from "../env";
+import { issueReset } from "../reset";
 import { HttpError, fromIso, newToken, sha256, toIso } from "../util";
 
 const idParam = z.object({ id: z.string() });
@@ -50,6 +51,15 @@ export const guideRoutes = async (app: FastifyInstance): Promise<void> => {
     const u = await prisma.user.findUnique({ where: { id } });
     if (!u || u.role !== "GUIDE") throw new HttpError(404, "Guia não encontrado.");
     return { inviteLink: await issueInvite(id) };
+  });
+
+  app.post("/guides/:id/reset-link", async (req) => {
+    await requireAdmin(req);
+    const { id } = idParam.parse(req.params);
+    const u = await prisma.user.findUnique({ where: { id } });
+    if (!u || u.role !== "GUIDE") throw new HttpError(404, "Guia não encontrado.");
+    if (u.status === "INVITED") throw new HttpError(400, "O guia ainda não ativou a conta.");
+    return { resetLink: await issueReset(id) };
   });
 
   app.patch("/guides/:id", async (req) => {

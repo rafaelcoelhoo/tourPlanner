@@ -35,6 +35,8 @@ const TRANSLATIONS: Record<string, { en: string; es: string }> = {
   "Selecione a sua cidade no perfil.": { en: "Select your city in your profile.", es: "Selecciona tu ciudad en tu perfil." },
   "Sem acesso a esta cidade.": { en: "No access to this city.", es: "Sin acceso a esta ciudad." },
   "Cidade em falta.": { en: "City is missing.", es: "Falta la ciudad." },
+  "Demasiadas tentativas. Tente novamente mais tarde.": { en: "Too many attempts. Please try again later.", es: "Demasiados intentos. Inténtalo de nuevo más tarde." },
+  "Link inválido ou expirado.": { en: "Invalid or expired link.", es: "Enlace no válido o caducado." },
   "Não encontrado.": { en: "Not found.", es: "No encontrado." },
   "Erro interno.": { en: "Internal error.", es: "Error interno." },
   "Dados inválidos.": { en: "Invalid data.", es: "Datos no válidos." },

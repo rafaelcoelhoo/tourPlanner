@@ -15,7 +15,7 @@ export const GuidesPage = () => {
   const hasSecondary = cat.data?.tours.some((t) => t.active && t.kind === "SECONDARY") ?? false;
   const guides = useFetch<GuideListItem[]>(cityId ? `/guides?cityId=${cityId}` : null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", inviteCity: "" });
-  const [link, setLink] = useState<{ name: string; url: string } | null>(null);
+  const [link, setLink] = useState<{ name: string; url: string; reset?: boolean } | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"list" | "tour" | "language" | "load">("list");
 
@@ -36,6 +36,10 @@ export const GuidesPage = () => {
   const reinvite = async (g: GuideListItem) => {
     const r = await post<{ inviteLink: string }>(`/guides/${g.id}/invite`);
     setLink({ name: g.name, url: r.inviteLink });
+  };
+  const resetLink = async (g: GuideListItem) => {
+    const r = await post<{ resetLink: string }>(`/guides/${g.id}/reset-link`);
+    setLink({ name: g.name, url: r.resetLink, reset: true });
   };
   const toggle = async (g: GuideListItem) => {
     try {
@@ -61,7 +65,7 @@ export const GuidesPage = () => {
       {error && <p className="error">{error}</p>}
       {link && (
         <div className="card">
-          <p>{t("guides.linkFor", { name: link.name })}</p>
+          <p>{t(link.reset ? "guides.resetLinkFor" : "guides.linkFor", { name: link.name })}</p>
           <input readOnly value={link.url} style={{ width: "100%" }} onFocus={(e) => e.target.select()} />
           <button onClick={() => void navigator.clipboard.writeText(link.url)}>{t("copy")}</button>
         </div>
@@ -85,6 +89,7 @@ export const GuidesPage = () => {
             <div className="row">
               <span className="badge">{t(`guides.${g.status}`)}</span>
               {g.status === "INVITED" && <button onClick={() => void reinvite(g)}>{t("guides.newLink")}</button>}
+              {g.status === "ACTIVE" && <button onClick={() => void resetLink(g)}>{t("guides.resetLink")}</button>}
               {g.status !== "INVITED" && <button onClick={() => void toggle(g)}>{g.status === "DISABLED" ? t("guides.activate") : t("guides.deactivate")}</button>}
             </div>
           </div>
