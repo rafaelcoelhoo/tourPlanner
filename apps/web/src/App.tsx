@@ -3,6 +3,7 @@ import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-rou
 import { useAuth } from "./auth";
 import { useCity } from "./city";
 import { LanguageSelect, useI18n, type Key } from "./i18n";
+import { Logo } from "./components/Logo";
 import { Login, Activate, Forgot, ResetPassword } from "./pages/Login";
 import { GridPage } from "./pages/Grid";
 import { NeedsPage } from "./pages/Needs";
@@ -48,7 +49,7 @@ const Layout = () => {
         <button className="menu-btn" aria-label={menuOpen ? t("menu.close") : t("menu.open")} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
           <span /><span /><span />
         </button>
-        <strong>{t("appName")}</strong>
+        <span className="brand"><Logo size={28} /><strong>{t("appName")}</strong></span>
         {admin ? (
           <select value={cityId ?? ""} onChange={(e) => setCityId(e.target.value)} aria-label={t("cityAria")}>
             {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -79,7 +80,7 @@ const Home = () => {
 export const App = () => {
   const { ready, me } = useAuth();
   const { t } = useI18n();
-  if (!ready) return <p className="center">{t("loading")}</p>;
+  if (!ready) return <p className="center" role="status">{t("loading")}</p>;
   const admin = me?.role === "ADMIN";
   return (
     <Routes>

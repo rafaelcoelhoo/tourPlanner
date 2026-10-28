@@ -5,6 +5,7 @@ import { useCatalog } from "../hooks";
 import { errMsg, fmtTime, parseTime, slotLabel, sortSlots } from "../format";
 import { useI18n } from "../i18n";
 import type { Settings } from "../types";
+import { PageHead } from "../components/PageHead";
 
 interface Form { id?: string; tourId: string; languageId: string; time: string; durationMin: number; weekdays: number[]; defaultNeeded: number; active: boolean }
 
@@ -61,7 +62,7 @@ export const SlotsPage = () => {
 
   return (
     <div>
-      <h1>{tr("slots.title")}{city ? ` · ${city.name}` : ""}</h1>
+      <PageHead title={tr("slots.title")} meta={city?.name} />
       {msg && <p className="muted">{msg}</p>}
       <div className="card">
         <h2>{tr("slots.cities")}</h2>
@@ -95,7 +96,7 @@ export const SlotsPage = () => {
 
       <div className="card">
         <h2>{tr("slots.rules")}</h2>
-        <div className="row">
+        <div className="form-grid">
           <label>{tr("slots.afternoonStart")}<input type="time" value={fmtTime(st.morningCutoffMinutes)} onChange={(e) => setSettings({ ...st, morningCutoffMinutes: parseTime(e.target.value) })} /></label>
           <label>{tr("slots.minGap")}<input type="number" min={0} value={st.minGapMinutes} onChange={(e) => setSettings({ ...st, minGapMinutes: Number(e.target.value) })} /></label>
           <label>{tr("slots.maxPerDay")}<input type="number" min={1} value={st.maxToursPerDay} onChange={(e) => setSettings({ ...st, maxToursPerDay: Number(e.target.value) })} /></label>

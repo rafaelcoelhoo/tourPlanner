@@ -7,6 +7,7 @@ import { useCatalog, useFetch } from "../hooks";
 import { errMsg, fmtTime, parseTime, slotLabel, sortSlots } from "../format";
 import { useI18n, type Key } from "../i18n";
 import { useConfirm } from "../components/ConfirmDialog";
+import { PageHead } from "../components/PageHead";
 import type { Period } from "@schedule/core";
 import type { Profile } from "../types";
 
@@ -108,8 +109,7 @@ export const ProfilePage = () => {
 
   return (
     <div>
-      <h1>{p.name}</h1>
-      <p className="muted">{p.email}{p.phone ? ` · ${p.phone}` : ""}</p>
+      <PageHead title={p.name} meta={<>{p.email}{p.phone ? ` · ${p.phone}` : ""}</>} />
       {msg && <p className="error">{msg}</p>}
       {cityCard}
 

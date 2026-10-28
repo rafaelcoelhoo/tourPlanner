@@ -4,6 +4,24 @@ import { get, post } from "../api";
 import { useAuth } from "../auth";
 import { errMsg } from "../format";
 import { LanguageSelect, useI18n } from "../i18n";
+import { Logo } from "../components/Logo";
+import type { ReactNode } from "react";
+
+const AuthShell = ({ children }: { children: ReactNode }) => {
+  const { t } = useI18n();
+  return (
+    <main className="auth">
+      <div className="auth-brand">
+        <Logo size={44} />
+        <div>
+          <p className="auth-name">{t("appName")}</p>
+          <p className="auth-tagline">{t("login.tagline")}</p>
+        </div>
+      </div>
+      {children}
+    </main>
+  );
+};
 
 export const Login = () => {
   const { login } = useAuth();
@@ -20,14 +38,16 @@ export const Login = () => {
     }
   };
   return (
+    <AuthShell>
     <form className="card narrow" onSubmit={(e) => void submit(e)}>
-      <div className="row end"><h1>{t("login.title")}</h1><LanguageSelect /></div>
+      <div className="auth-head"><h1>{t("login.title")}</h1><LanguageSelect /></div>
       <label>{t("login.email")}<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" /></label>
       <label>{t("login.password")}<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" /></label>
       {error && <p className="error">{error}</p>}
       <button className="primary">{t("login.submit")}</button>
       <Link to="/recuperar" className="muted">{t("login.forgot")}</Link>
     </form>
+    </AuthShell>
   );
 };
 
@@ -53,13 +73,15 @@ export const Activate = () => {
     }
   };
   return (
+    <AuthShell>
     <form className="card narrow" onSubmit={(e) => void submit(e)}>
-      <div className="row end"><h1>{t("activate.title")}</h1><LanguageSelect /></div>
+      <div className="auth-head"><h1>{t("activate.title")}</h1><LanguageSelect /></div>
       {info && <p>{t("activate.hello", { name: info.name, email: info.email })}</p>}
       {info && <label>{t("activate.password")}<input type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" /></label>}
       {error && <p className="error">{error}</p>}
       {info && <button className="primary">{t("activate.submit")}</button>}
     </form>
+    </AuthShell>
   );
 };
 
@@ -79,8 +101,9 @@ export const Forgot = () => {
     }
   };
   return (
+    <AuthShell>
     <form className="card narrow" onSubmit={(e) => void submit(e)}>
-      <div className="row end"><h1>{t("forgot.title")}</h1><LanguageSelect /></div>
+      <div className="auth-head"><h1>{t("forgot.title")}</h1><LanguageSelect /></div>
       <p className="muted">{t("forgot.help")}</p>
       <label>{t("login.email")}<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" /></label>
       {sent && <p className="ok">{t("forgot.sent")}</p>}
@@ -88,6 +111,7 @@ export const Forgot = () => {
       <button className="primary">{t("forgot.send")}</button>
       <Link to="/login" className="muted">{t("forgot.back")}</Link>
     </form>
+    </AuthShell>
   );
 };
 
@@ -113,13 +137,15 @@ export const ResetPassword = () => {
     }
   };
   return (
+    <AuthShell>
     <form className="card narrow" onSubmit={(e) => void submit(e)}>
-      <div className="row end"><h1>{t("reset.title")}</h1><LanguageSelect /></div>
+      <div className="auth-head"><h1>{t("reset.title")}</h1><LanguageSelect /></div>
       {info && <p>{t("reset.hello", { name: info.name })}</p>}
       {info && <label>{t("activate.password")}<input type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" /></label>}
       {error && <p className="error">{error}</p>}
       {info && <button className="primary">{t("reset.submit")}</button>}
       {!info && <Link to="/recuperar" className="muted">{t("login.forgot")}</Link>}
     </form>
+    </AuthShell>
   );
 };

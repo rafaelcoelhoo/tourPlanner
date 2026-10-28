@@ -6,6 +6,7 @@ import { useCatalog, useFetch } from "../hooks";
 import { errMsg } from "../format";
 import { useI18n } from "../i18n";
 import { GuidesByGroup, GuidesLoad } from "./GuidesOverview";
+import { PageHead } from "../components/PageHead";
 import type { GuideListItem } from "../types";
 
 export const GuidesPage = () => {
@@ -52,8 +53,8 @@ export const GuidesPage = () => {
 
   return (
     <div>
-      <h1>{t("guides.title")}{city ? ` · ${city.name}` : ""}</h1>
-      <form className="card row" onSubmit={(e) => void create(e)}>
+      <PageHead title={t("guides.title")} meta={city?.name} />
+      <form className="card form-inline" onSubmit={(e) => void create(e)}>
         <input placeholder={t("guides.name")} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
         <input type="email" placeholder={t("guides.email")} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
         <input placeholder={t("guides.phoneOpt")} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />

@@ -6,6 +6,7 @@ import { Modal } from "../components/Modal";
 import { MonthNav } from "../components/MonthNav";
 import { OccurrenceEditor } from "../components/OccurrenceEditor";
 import { useConfirm } from "../components/ConfirmDialog";
+import { PageHead } from "../components/PageHead";
 import { useCity } from "../city";
 import { useCatalog, useFetch } from "../hooks";
 import { daysInMonth, errMsg, slotLabel, sortSlots, today as todayIso, weekdayIdx } from "../format";
@@ -13,7 +14,7 @@ import { useI18n } from "../i18n";
 import type { MonthView, OccurrenceView } from "../types";
 
 export const GridPage = () => {
-  const { cityId, ym, setYm } = useCity();
+  const { cityId, city, ym, setYm } = useCity();
   const [weekIdx, setWeekIdx] = useState<number | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
@@ -27,6 +28,7 @@ export const GridPage = () => {
     setViewState(v);
   };
   const [agendaDay, setAgendaDay] = useState<string | null>(null);
+  const [legendOpen, setLegendOpen] = useState(false);
   const { t, fmtDate, weekdayShort, violation } = useI18n();
   const confirm = useConfirm();
   const cat = useCatalog();
@@ -110,42 +112,64 @@ export const GridPage = () => {
 
   return (
     <div>
-      <div className="row end">
-        <MonthNav year={ym.year} month={ym.month} onChange={(y, mo) => { setYm({ year: y, month: mo }); setWeekIdx(null); }} />
-        <span className={`badge ${m.status === "DRAFT" ? "draft" : m.status === "PUBLISHED" ? "published" : ""}`}>
-          {m.status === "NEEDS_DRAFT" ? t("status.noDraft") : m.status === "DRAFT" ? t("status.draft") : t("status.published")}
-        </span>
-      </div>
-      <div className="row" style={{ margin: "10px 0" }}>
-        <div className="seg" role="group">
-          <button className={view === "table" ? "on" : ""} onClick={() => setView("table")}>{t("view.table")}</button>
-          <button className={view === "agenda" ? "on" : ""} onClick={() => setView("agenda")}>{t("view.agenda")}</button>
-        </div>
-        {view === "table" && (
-          <button onClick={() => setWeekIdx(weekIdx !== null ? null : 0)}>
-            {weekIdx !== null ? t("grid.viewMonth") : t("grid.viewWeek")}
-          </button>
-        )}
-        {view === "table" && weekIdx !== null && (
+      <PageHead
+        title={t("nav.schedule")}
+        meta={
           <>
-            <button disabled={weekIdx <= 0} onClick={() => setWeekIdx(Math.max(0, weekIdx - 1))}>{t("grid.prevWeek")}</button>
-            <button disabled={weekIdx >= weeks.length - 1} onClick={() => setWeekIdx(Math.min(weeks.length - 1, weekIdx + 1))}>{t("grid.nextWeek")}</button>
+            {city && <span>{city.name}</span>}
+            <span className={`badge ${m.status === "DRAFT" ? "draft" : m.status === "PUBLISHED" ? "published" : ""}`}>
+              {m.status === "NEEDS_DRAFT" ? t("status.noDraft") : m.status === "DRAFT" ? t("status.draft") : t("status.published")}
+            </span>
           </>
-        )}
-        <Link to="/necessidades"><button>{t("grid.matrix")}</button></Link>
-        <button className="primary" disabled={!m.needsConfirmedAt || m.status === "PUBLISHED"} onClick={() => void generate()}>{t("grid.generate")}</button>
-        {m.status !== "NEEDS_DRAFT" && (
-          <button onClick={() => void act(() => (m.status === "PUBLISHED" ? post(`${base}/publish`, { publish: false }) : publish()), m.status === "PUBLISHED" ? t("grid.unpublishedMsg") : t("grid.publishedMsg"))}>
-            {m.status === "PUBLISHED" ? t("grid.unpublish") : t("grid.publish")}
-          </button>
-        )}
+        }
+        actions={<MonthNav year={ym.year} month={ym.month} onChange={(y, mo) => { setYm({ year: y, month: mo }); setWeekIdx(null); }} />}
+      />
+      <div className="toolbar">
+        <div className="toolbar-group">
+          <div className="seg" role="group">
+            <button className={view === "table" ? "on" : ""} aria-pressed={view === "table"} onClick={() => setView("table")}>{t("view.table")}</button>
+            <button className={view === "agenda" ? "on" : ""} aria-pressed={view === "agenda"} onClick={() => setView("agenda")}>{t("view.agenda")}</button>
+          </div>
+          {view === "table" && (
+            <button className="ghost" onClick={() => setWeekIdx(weekIdx !== null ? null : 0)}>
+              {weekIdx !== null ? t("grid.viewMonth") : t("grid.viewWeek")}
+            </button>
+          )}
+          {view === "table" && weekIdx !== null && (
+            <>
+              <button className="ghost" disabled={weekIdx <= 0} onClick={() => setWeekIdx(Math.max(0, weekIdx - 1))}>{t("grid.prevWeek")}</button>
+              <button className="ghost" disabled={weekIdx >= weeks.length - 1} onClick={() => setWeekIdx(Math.min(weeks.length - 1, weekIdx + 1))}>{t("grid.nextWeek")}</button>
+            </>
+          )}
+        </div>
+        <div className="toolbar-group">
+          <Link className="btn" to="/necessidades">{t("grid.matrix")}</Link>
+          {m.status !== "NEEDS_DRAFT" && (
+            <button onClick={() => void act(() => (m.status === "PUBLISHED" ? post(`${base}/publish`, { publish: false }) : publish()), m.status === "PUBLISHED" ? t("grid.unpublishedMsg") : t("grid.publishedMsg"))}>
+              {m.status === "PUBLISHED" ? t("grid.unpublish") : t("grid.publish")}
+            </button>
+          )}
+          <button className="primary" disabled={!m.needsConfirmedAt || m.status === "PUBLISHED"} onClick={() => void generate()}>{t("grid.generate")}</button>
+        </div>
       </div>
-      {!m.needsConfirmedAt && <p className="error">{t("grid.needsNotConfirmed")}</p>}
-      {m.occurrences.length > 0 && <p className={missingTotal ? "miss" : "muted"}>{missingTotal ? t("grid.missingTotal", { n: missingTotal }) : t("grid.allComplete")}</p>}
-      {warningCount > 0 && <p className="miss">{t("grid.warningCount", { n: warningCount })}</p>}
-      {m.occurrences.length > 0 && <p className="muted">{t("ac.legend")}</p>}
-      {m.status === "PUBLISHED" && <p className="muted">{t("confirm.legend", { h: c.settings.confirmWindowHours })}</p>}
-      {msg && <p className="muted">{msg}</p>}
+      {!m.needsConfirmedAt && <p className="notice error-notice">{t("grid.needsNotConfirmed")}</p>}
+      {msg && <p className="notice" role="status">{msg}</p>}
+      {m.occurrences.length > 0 && (
+        <div className="summary">
+          {missingTotal > 0 ? <span className="stat bad">{t("grid.missingTotal", { n: missingTotal })}</span> : <span className="stat good">{t("grid.allComplete")}</span>}
+          {warningCount > 0 && <span className="stat warn">{t("grid.warningCount", { n: warningCount })}</span>}
+          <button className="sm ghost legend-toggle" aria-expanded={legendOpen} aria-controls="grid-legend" onClick={() => setLegendOpen(!legendOpen)}>{t("legend.title")}</button>
+          <ul id="grid-legend" className={`legend ${legendOpen ? "open" : ""}`} aria-label={t("legend.title")}>
+            <li><i className="sw complete" />{t("occ.complete")}</li>
+            <li><i className="sw incomplete" />{t("legend.missing")}</li>
+            <li><i className="sw ac" />{t("ac.badge")}</li>
+            <li><i className="sw nt" />{t("nt")}</li>
+            <li><i className="sw off" />{t("legend.off")}</li>
+            {m.status === "PUBLISHED" && <li><b className="cf-mark">✓</b>{t("confirm.byGuide")}</li>}
+            {m.status === "PUBLISHED" && <li><b className="pend-mark">○</b>{t("confirm.pending")} · {t("legend.window", { h: c.settings.confirmWindowHours })}</li>}
+          </ul>
+        </div>
+      )}
       {view === "agenda" && (
         <Agenda dates={monthDates} occurrences={m.occurrences} catalog={c} selected={selectedDay} today={today} onSelect={setAgendaDay} onOpen={setOpenId} />
       )}

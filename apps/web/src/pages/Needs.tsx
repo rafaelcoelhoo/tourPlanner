@@ -3,6 +3,7 @@ import { put } from "../api";
 import { MonthNav } from "../components/MonthNav";
 import { useCity } from "../city";
 import { useI18n } from "../i18n";
+import { PageHead } from "../components/PageHead";
 import { useCatalog, useFetch } from "../hooks";
 import { daysInMonth, errMsg, slotLabel, sortSlots, weekdayIdx } from "../format";
 
@@ -47,11 +48,11 @@ export const NeedsPage = () => {
 
   return (
     <div>
-      <h1>{t("needs.title")}</h1>
-      <div className="row end">
-        <MonthNav year={ym.year} month={ym.month} onChange={(y, m) => setYm({ year: y, month: m })} />
-        <span className={`badge ${needs.data.confirmed ? "published" : "draft"}`}>{needs.data.confirmed ? t("needs.confirmed") : t("needs.toConfirm")}</span>
-      </div>
+      <PageHead
+        title={t("needs.title")}
+        meta={<span className={`badge ${needs.data.confirmed ? "published" : "draft"}`}>{needs.data.confirmed ? t("needs.confirmed") : t("needs.toConfirm")}</span>}
+        actions={<MonthNav year={ym.year} month={ym.month} onChange={(y, m) => setYm({ year: y, month: m })} />}
+      />
       <p className="muted">{t("needs.help")}</p>
       <div className="row" style={{ marginBottom: 10 }}>
         <button onClick={() => void save(false)}>{t("save")}</button>

@@ -6,6 +6,7 @@ import { post } from "../api";
 import { useCatalog, useFetch } from "../hooks";
 import { daysInMonth, errMsg, fmtTime, today as todayIso, weekdayIdx } from "../format";
 import { useI18n } from "../i18n";
+import { PageHead } from "../components/PageHead";
 import type { MyItem } from "../types";
 
 export const MySchedule = () => {
@@ -39,13 +40,13 @@ export const MySchedule = () => {
     return { time, text: `${tour} · ${l}`, short: `${time} ${tour} ${lang?.code ?? ""}`.trim() };
   };
   const needsConfirm = (i: MyItem) => i.status === "ACTIVE" && i.confirm?.state === "OPEN" && !i.confirmedAt;
-  const renderItem = (i: MyItem) => {
+  const renderItem = (i: MyItem, showDate = true) => {
     const l = label(i);
     const open = i.status === "ACTIVE" && i.confirm?.state === "OPEN";
     const opensSoon = i.status === "ACTIVE" && i.confirm?.state === "NOT_YET" && Date.parse(i.confirm.opensAt) - Date.now() < 24 * 3_600_000;
     return (
       <div key={i.occurrenceId} className={open && !i.confirmedAt ? "tour-pending" : ""}>
-        <strong>{fmtDate(i.date)} · {l.time}</strong> {i.status === "NO_DEMAND" && <span className="badge">{t("occ.nt")}</span>}
+        <strong className="item-time">{showDate ? `${fmtDate(i.date)} · ${l.time}` : l.time}</strong> {i.status === "NO_DEMAND" && <span className="badge">{t("occ.nt")}</span>}
         {i.status === "ACTIVE" && i.adminConfirmed && <span className="badge blue-badge">{t("ac.badge")}</span>}
         {i.status === "ACTIVE" && i.confirmedAt && <span className="badge published">✓ {t("confirm.byMe")}</span>}
         <div>{l.text}</div>
@@ -58,6 +59,7 @@ export const MySchedule = () => {
     );
   };
   const toConfirm = items.filter(needsConfirm);
+  const groups = [...items.reduce((m, i) => m.set(i.date, [...(m.get(i.date) ?? []), i]), new Map<string, MyItem[]>())];
   const openItems = items
     .filter((i) => i.status === "ACTIVE" && i.confirm?.state === "OPEN")
     .sort((a, b) => Number(Boolean(a.confirmedAt)) - Number(Boolean(b.confirmedAt)) || a.date.localeCompare(b.date));
@@ -66,18 +68,26 @@ export const MySchedule = () => {
 
   return (
     <div>
-      <h1>{t("my.title")}{city ? ` · ${city.name}` : ""}</h1>
-      <div className="row end">
+      <PageHead title={t("my.title")} meta={city?.name} />
+      <div className="toolbar">
         <MonthNav year={ym.year} month={ym.month} onChange={(y, m) => setYm({ year: y, month: m })} />
-        <button onClick={() => setView(view === "list" ? "cal" : "list")}>{view === "list" ? t("my.calendar") : t("my.list")}</button>
+        <div className="seg" role="group">
+          <button className={view === "list" ? "on" : ""} aria-pressed={view === "list"} onClick={() => setView("list")}>{t("my.list")}</button>
+          <button className={view === "cal" ? "on" : ""} aria-pressed={view === "cal"} onClick={() => setView("cal")}>{t("my.calendar")}</button>
+        </div>
       </div>
       {sched.error && <p className="error">{sched.error}</p>}
       {view === "list" && toConfirm.length > 0 && <p className="banner">{t("confirm.banner", { n: toConfirm.length })}</p>}
       {confirmError && <p className="error">{confirmError}</p>}
       {items.length === 0 && !sched.loading && <p className="muted">{t("my.empty")}</p>}
       {view === "list" ? (
-        <div className="card list">
-          {items.map((i) => renderItem(i))}
+        <div className="day-groups">
+          {groups.map(([date, its]) => (
+            <section key={date} className={`day-group ${date < todayIso() ? "past" : ""} ${date === todayIso() ? "is-today" : ""}`}>
+              <h2 className="day-group-title">{fmtDate(date)}</h2>
+              <div className="card list">{its.map((i) => renderItem(i, false))}</div>
+            </section>
+          ))}
         </div>
       ) : (
         <>

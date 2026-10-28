@@ -5,6 +5,7 @@ import { patch, post } from "../api";
 import { useCatalog, useFetch } from "../hooks";
 import { addDays, errMsg, slotLabel, today } from "../format";
 import { useI18n } from "../i18n";
+import { PageHead } from "../components/PageHead";
 import type { OccurrenceView } from "../types";
 
 export const DayPage = () => {
@@ -32,27 +33,29 @@ export const DayPage = () => {
   const allConfirmed = confirmable.length > 0 && confirmable.every((o) => o.adminConfirmed);
   return (
     <div>
-      <div className="row end">
-        <h1>{t("day.title")}</h1>
-        {ms && (
+      <PageHead
+        title={t("day.title")}
+        meta={ms && (
           <span className={`badge ${ms === "DRAFT" ? "draft" : ms === "PUBLISHED" ? "published" : ""}`}>
             {ms === "NEEDS_DRAFT" ? t("status.noDraft") : ms === "DRAFT" ? t("status.draft") : t("status.published")}
           </span>
         )}
-      </div>
-      <div className="row" style={{ marginBottom: 10 }}>
-        <button onClick={() => setDate(addDays(date, -1))}>‹</button>
-        <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
-        <button onClick={() => setDate(addDays(date, 1))}>›</button>
-        <strong>{fmtDate(date)}</strong>
-      </div>
-      {confirmable.length > 0 && (
-        <div className="row" style={{ marginBottom: 10 }}>
-          <button className={allConfirmed ? "" : "blue"} onClick={() => void act(() => post(`/cities/${cityId}/days/${date}/confirm`, { confirmed: !allConfirmed }))}>
-            {allConfirmed ? t("ac.undo") : t("ac.confirmAll")}
-          </button>
+      />
+      <div className="toolbar">
+        <div className="toolbar-group">
+          <button className="icon-btn" aria-label={t("nav.prevDay")} onClick={() => setDate(addDays(date, -1))}>‹</button>
+          <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label={t("day.title")} />
+          <button className="icon-btn" aria-label={t("nav.nextDay")} onClick={() => setDate(addDays(date, 1))}>›</button>
+          <strong className="day-label">{fmtDate(date)}</strong>
         </div>
-      )}
+        {confirmable.length > 0 && (
+          <div className="toolbar-group">
+            <button className={allConfirmed ? "" : "blue"} onClick={() => void act(() => post(`/cities/${cityId}/days/${date}/confirm`, { confirmed: !allConfirmed }))}>
+              {allConfirmed ? t("ac.undo") : t("ac.confirmAll")}
+            </button>
+          </div>
+        )}
+      </div>
       {day.error && <p className="error">{day.error}</p>}
       {err && <p className="error">{err}</p>}
       {occs.length === 0 && !day.loading && <p className="muted">{t("day.empty")}</p>}
@@ -61,22 +64,24 @@ export const DayPage = () => {
         const active = o.assignments.filter((a) => !a.withdrawn).length;
         const confirmed = o.assignments.filter((a) => !a.withdrawn && a.confirmState === "CONFIRMED").length;
         return (
-          <div key={o.id} className={`card ${o.adminConfirmed ? "ac-card" : ""}`}>
-            <div className="row end" onClick={() => setOpenId(openId === o.id ? null : o.id)} style={{ cursor: "pointer" }}>
-              <strong>{slot ? slotLabel(slot, c) : "?"}</strong>
-              <span className={`badge ${o.status === "NO_DEMAND" ? "" : o.missing ? "draft" : "published"}`}>
-                {o.status === "NO_DEMAND" ? t("nt") : t("day.guides", { a: active, n: o.needed })}
-              </span>
-            </div>
-            {o.status === "ACTIVE" && (
-              <div className="row" style={{ margin: "6px 0" }}>
-                {o.adminConfirmed && <span className="badge blue-badge">{t("ac.badge")}</span>}
-                <button className={o.adminConfirmed ? "link" : "blue"} onClick={() => void act(() => patch(`/occurrences/${o.id}`, { adminConfirmed: !o.adminConfirmed }))}>
-                  {o.adminConfirmed ? t("ac.undo") : t("ac.confirm")}
-                </button>
+          <div key={o.id} className={`card tour-card ${o.status === "NO_DEMAND" ? "nt-card" : o.adminConfirmed ? "ac-card" : o.missing ? "miss-card" : ""}`}>
+            <div className="tour-card-head">
+              <button className="tour-title" aria-expanded={openId === o.id} onClick={() => setOpenId(openId === o.id ? null : o.id)}>
+                {slot ? slotLabel(slot, c) : "?"}
+              </button>
+              <div className="tour-card-side">
+                <span className={`badge ${o.status === "NO_DEMAND" ? "" : o.missing ? "draft" : "published"}`}>
+                  {o.status === "NO_DEMAND" ? t("nt") : t("day.guides", { a: active, n: o.needed })}
+                </span>
+                {o.status === "ACTIVE" && o.adminConfirmed && <span className="badge blue-badge">{t("ac.badge")}</span>}
+                {o.status === "ACTIVE" && (
+                  <button className={`sm ${o.adminConfirmed ? "ghost" : "blue"}`} onClick={() => void act(() => patch(`/occurrences/${o.id}`, { adminConfirmed: !o.adminConfirmed }))}>
+                    {o.adminConfirmed ? t("ac.undo") : t("ac.confirm")}
+                  </button>
+                )}
               </div>
-            )}
-            <div className="muted">
+            </div>
+            <div className="muted tour-card-body">
               {o.assignments.length === 0 && "—"}
               {o.assignments.map((a, idx) => (
                 <span key={a.id} className={`${a.confirmState === "CONFIRMED" ? "cf-inline" : a.confirmState === "PENDING" ? "pend-inline" : ""}`}>
