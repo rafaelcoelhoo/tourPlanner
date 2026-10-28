@@ -6,6 +6,7 @@ import { useCity } from "../city";
 import { useCatalog, useFetch } from "../hooks";
 import { errMsg, fmtTime, parseTime, slotLabel, sortSlots } from "../format";
 import { useI18n, type Key } from "../i18n";
+import { useConfirm } from "../components/ConfirmDialog";
 import type { Period } from "@schedule/core";
 import type { Profile } from "../types";
 
@@ -18,6 +19,7 @@ export const ProfilePage = () => {
   const { me, refresh } = useAuth();
   const { cities } = useCity();
   const { t: tr, weekdayLong, periodLabel, languageName } = useI18n();
+  const confirm = useConfirm();
   const id = params.id ?? me?.id ?? "";
   const prof = useFetch<Profile>(`/guides/${id}/profile`);
   const cat = useCatalog(prof.data ? prof.data.cityId : null);
@@ -36,7 +38,7 @@ export const ProfilePage = () => {
     }
   };
   const changeCity = async (cityId: string) => {
-    if (prof.data?.cityId && !window.confirm(tr("prof.cityChangeConfirm"))) return;
+    if (prof.data?.cityId && !(await confirm({ title: tr("prof.cityChangeTitle"), message: tr("prof.cityChangeHelp"), confirmLabel: tr("dlg.continue"), tone: "warning" }))) return;
     await run(() => put(`/guides/${id}/city`, { cityId }));
     if (id === me?.id) await refresh();
   };

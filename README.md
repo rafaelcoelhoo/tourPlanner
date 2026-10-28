@@ -28,6 +28,13 @@ Cidades: o admin escolhe a cidade no topo (Porto, Lisboa, Braga, Coimbra, Guimar
 Fluxo do admin: **Matriz** (confirmar necessidades) → **Grelha** (Gerar rascunho, editar células, Publicar) → **Dia** (confirmação diária, NT, notas, retirar guias).
 Guias novos: **Guias** → Convidar → copiar link de ativação (7 dias) e enviar por WhatsApp.
 
+## Confirmação do guia
+
+- Nas **3 horas anteriores** ao início de cada tour (configurável em **Slots → Regras**, 1 a 48 h), o guia vê o botão "Confirmar presença" no seu horário (e um aviso no topo). Pode anular até ao fim do tour.
+- O admin vê o estado no **Horário** e no **Dia**: `✓` a negrito = confirmado, `○` em itálico = a janela já abriu e falta confirmar. Só o guia confirma: o admin apenas vê o estado, não o pode alterar.
+- Só conta para tours de meses publicados, ativos (não NT) e atribuições não retiradas. Retirar e repor um guia limpa a confirmação. As horas usam o fuso de Lisboa (inclui horário de verão).
+- Não há atualização automática das páginas: para ver novas confirmações, o admin recarrega o Horário ou o Dia, e o guia recarrega o seu horário para ver o botão quando a janela abrir.
+
 ## Recuperação de palavra-passe
 
 - O guia usa "Esqueci-me da palavra-passe" no login: recebe um link por email (válido 1 hora, uso único) e escolhe a nova palavra-passe. Terminar a recuperação encerra as outras sessões.
@@ -46,7 +53,7 @@ npm run typecheck
 
 ## Algoritmo (packages/core/src/generate.ts)
 
-Guloso dia a dia. Em cada passo escolhe a ocorrência com menos candidatos elegíveis e atribui o candidato com menor rácio (tours do mesmo tipo – Centro ou secundário – ÷ dias disponíveis; desempate pelo rácio total e id). Ignora ocorrências NT, preserva atribuições manuais (`locked`) e deixa slots incompletos em vez de falhar. Disponibilidade parcial (manhã/tarde) conta meio dia.
+Guloso dia a dia. Em cada passo escolhe a ocorrência com menos candidatos elegíveis e atribui o candidato com menor rácio (tours do mesmo tipo – Centro ou secundário – ÷ dias disponíveis; desempate pelo rácio total e id). Ignora ocorrências NT e deixa slots incompletos em vez de falhar. Na aplicação, **Gerar rascunho** apaga todas as atribuições do mês (manuais incluídas) e gera de novo; NT e notas mantêm-se. A função pura continua a aceitar atribuições bloqueadas (`locked`), mas a aplicação não as usa. Disponibilidade parcial (manhã/tarde) conta meio dia.
 
 Limitações: sem backtracking nem lookahead entre dias (um guia pode ser "gasto" num dia em que outro slot do dia seguinte só ele cobre); não usa histórico de meses anteriores; resultado dependente da ordem diária. Melhoria prevista: pesquisa local (trocas entre guias) para reduzir a variância dos rácios.
 

@@ -1,4 +1,5 @@
-import { Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./auth";
 import { useCity } from "./city";
 import { LanguageSelect, useI18n, type Key } from "./i18n";
@@ -7,6 +8,7 @@ import { GridPage } from "./pages/Grid";
 import { NeedsPage } from "./pages/Needs";
 import { DayPage } from "./pages/Day";
 import { GuidesPage } from "./pages/Guides";
+import { LoadPage } from "./pages/Load";
 import { SlotsPage } from "./pages/Slots";
 import { ProfilePage } from "./pages/Profile";
 import { MySchedule } from "./pages/MySchedule";
@@ -15,15 +17,37 @@ const Layout = () => {
   const { me, logout } = useAuth();
   const { cities, cityId, city, setCityId } = useCity();
   const { t } = useI18n();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { pathname } = useLocation();
+  useEffect(() => setMenuOpen(false), [pathname]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
   if (!me) return <Navigate to="/login" replace />;
   const admin = me.role === "ADMIN";
   const links: [string, Key][] = admin
-    ? [["/grelha", "nav.schedule"], ["/dia", "nav.day"], ["/necessidades", "nav.matrix"], ["/guias", "nav.guides"], ["/slots", "nav.slots"]]
+    ? [["/grelha", "nav.schedule"], ["/dia", "nav.day"], ["/necessidades", "nav.matrix"], ["/carga", "nav.load"], ["/guias", "nav.guides"], ["/slots", "nav.slots"]]
     : [["/horario", "nav.schedule"], ["/perfil", "nav.profile"]];
+  const navLinks = links.map(([to, label]) => (
+    <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "active" : "")}>{t(label)}</NavLink>
+  ));
+  const account = (
+    <>
+      <span className="muted">{me.name}</span>
+      <LanguageSelect />
+      <button className="link" onClick={() => void logout()}>{t("logout")}</button>
+    </>
+  );
   return (
     <div className="app">
       <div className="topwrap">
       <header className="top">
+        <button className="menu-btn" aria-label={menuOpen ? t("menu.close") : t("menu.open")} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
+          <span /><span /><span />
+        </button>
         <strong>{t("appName")}</strong>
         {admin ? (
           <select value={cityId ?? ""} onChange={(e) => setCityId(e.target.value)} aria-label={t("cityAria")}>
@@ -32,16 +56,16 @@ const Layout = () => {
         ) : (
           city && <span className="badge">{city.name}</span>
         )}
-        <span className="muted">{me.name}</span>
-        <LanguageSelect />
-        <button className="link" onClick={() => void logout()}>{t("logout")}</button>
+        <div className="account desktop-only">{account}</div>
       </header>
-      <nav className="tabs">
-        {links.map(([to, label]) => (
-          <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "active" : "")}>{t(label)}</NavLink>
-        ))}
-      </nav>
+      <nav className="tabs desktop-only">{navLinks}</nav>
       </div>
+      {menuOpen && <div className="drawer-bg" onClick={() => setMenuOpen(false)} />}
+      <nav className={`drawer ${menuOpen ? "open" : ""}`} aria-hidden={!menuOpen}>
+        <button className="drawer-close" aria-label={t("menu.close")} onClick={() => setMenuOpen(false)}>✕</button>
+        <div className="drawer-links">{navLinks}</div>
+        <div className="drawer-account">{account}</div>
+      </nav>
       <main><Outlet /></main>
     </div>
   );
@@ -70,6 +94,7 @@ export const App = () => {
             <Route path="/grelha" element={<GridPage />} />
             <Route path="/dia" element={<DayPage />} />
             <Route path="/necessidades" element={<NeedsPage />} />
+            <Route path="/carga" element={<LoadPage />} />
             <Route path="/guias" element={<GuidesPage />} />
             <Route path="/guias/:id" element={<ProfilePage />} />
             <Route path="/slots" element={<SlotsPage />} />

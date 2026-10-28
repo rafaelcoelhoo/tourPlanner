@@ -1,4 +1,4 @@
-import { availableDays } from "./availability";
+import { availableDays, dayWeight } from "./availability";
 import { checkAssignment, type DayTour } from "./rules";
 import { computeStats } from "./stats";
 import type {
@@ -30,13 +30,25 @@ export interface GenerateOutput {
 
 /**
  * Guloso dia a dia: em cada passo escolhe a ocorrência com menos candidatos elegíveis e atribui
- * o candidato com menor rácio (tours do mesmo tipo / dias disponíveis). Sem backtracking.
+ * o candidato com menor rácio (tours do mesmo tipo / dias disponíveis acumulados até ao dia). Sem backtracking.
  */
 export const generateSchedule = (input: GenerateInput): GenerateOutput => {
   const { slots, occurrences, guides, dates, settings } = input;
   const slotById = new Map(slots.map((s) => [s.id, s]));
   const weight = new Map(guides.map((g) => [g.id, availableDays(g, dates, settings.morningCutoffMinutes)]));
   const counts = new Map(guides.map((g) => [g.id, { primary: 0, secondary: 0 }]));
+  // Disponibilidade acumulada até cada dia (inclusive). A carga é comparada com o que o guia já pôde
+  // trabalhar até aqui, senão quem só está disponível numa parte do mês nunca consegue apanhar os outros.
+  const accrued = new Map<string, Map<IsoDate, number>>();
+  for (const g of guides) {
+    let sum = 0;
+    const byDate = new Map<IsoDate, number>();
+    for (const d of dates) {
+      sum += dayWeight(g, d, settings.morningCutoffMinutes);
+      byDate.set(d, sum);
+    }
+    accrued.set(g.id, byDate);
+  }
   const active = occurrences.filter((o) => o.status === "ACTIVE" && o.needed > 0 && slotById.has(o.slotId));
   const activeIds = new Set(active.map((o) => o.id));
   const occById = new Map(active.map((o) => [o.id, o]));
@@ -70,8 +82,8 @@ export const generateSchedule = (input: GenerateInput): GenerateOutput => {
         checkAssignment(g, o.id, s, o.date, dayTours.get(key(g.id, o.date)) ?? [], settings).length === 0,
     );
 
-  const rank = (g: GuideInfo, s: SlotInfo): [number, number, string] => {
-    const w = weight.get(g.id) || 1;
+  const rank = (g: GuideInfo, s: SlotInfo, date: IsoDate): [number, number, string] => {
+    const w = Math.max(accrued.get(g.id)?.get(date) ?? 0, 0.5);
     const c = counts.get(g.id) ?? { primary: 0, secondary: 0 };
     const own = s.tourKind === "PRIMARY" ? c.primary : c.secondary;
     return [own / w, (c.primary + c.secondary) / w, g.id];
@@ -102,8 +114,8 @@ export const generateSchedule = (input: GenerateInput): GenerateOutput => {
       const { o, s } = pending[best] as { o: OccurrenceInfo; s: SlotInfo };
       const have = assigned.get(o.id)?.size ?? 0;
       const pick = [...bestCands].sort((a, b) => {
-        const ra = rank(a, s);
-        const rb = rank(b, s);
+        const ra = rank(a, s, o.date);
+        const rb = rank(b, s, o.date);
         return ra[0] - rb[0] || ra[1] - rb[1] || (ra[2] < rb[2] ? -1 : 1);
       })[0];
       if (!pick) {

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { computeStats, generateSchedule, weekdayOf } from "@schedule/core";
+import { computeStats, confirmWindow, generateSchedule, weekdayOf } from "@schedule/core";
 import { prisma } from "../db";
 import { requireAdmin, requireUser } from "../auth";
 import { loadGuides, loadMonth, loadSettings, loadSlots, monthRange } from "../context";
@@ -102,7 +102,8 @@ export const monthRoutes = async (app: FastifyInstance): Promise<void> => {
       const m = await tx.monthSchedule.findUnique({ where: { cityId_year_month: { cityId, year, month } } });
       if (!m?.needsConfirmedAt) throw new HttpError(409, "Confirme primeiro a matriz de necessidades.");
       if (m.status === "PUBLISHED") throw new HttpError(409, "Mês já publicado. Despublique antes de gerar novamente.");
-      await tx.assignment.deleteMany({ where: { source: "GENERATED", occurrence: { monthId: m.id } } });
+      await tx.assignment.deleteMany({ where: { occurrence: { monthId: m.id } } });
+      await tx.slotOccurrence.updateMany({ where: { monthId: m.id }, data: { adminConfirmedAt: null } });
       const [data, guides, slots, settings] = await Promise.all([
         loadMonth(tx, cityId, year, month),
         loadGuides(tx, cityId),
@@ -116,7 +117,6 @@ export const monthRoutes = async (app: FastifyInstance): Promise<void> => {
         guides,
         dates: data.dates,
         settings,
-        locked: data.assignments.filter((a) => !a.withdrawn),
       });
       await tx.assignment.createMany({
         data: result.assignments.map((a) => ({ occurrenceId: a.occurrenceId, guideId: a.guideId, source: "GENERATED" as const })),
@@ -133,9 +133,23 @@ export const monthRoutes = async (app: FastifyInstance): Promise<void> => {
   app.post("/cities/:cityId/months/:year/:month/publish", async (req) => {
     await requireAdmin(req);
     const { cityId, year, month } = ym.parse(req.params);
-    const body = z.object({ publish: z.boolean().default(true) }).parse(req.body ?? {});
-    const m = await prisma.monthSchedule.findUnique({ where: { cityId_year_month: { cityId, year, month } } });
+    const body = z.object({ publish: z.boolean().default(true), force: z.boolean().default(false) }).parse(req.body ?? {});
+    const m = await prisma.monthSchedule.findUnique({
+      where: { cityId_year_month: { cityId, year, month } },
+      include: { occurrences: { include: occInclude } },
+    });
     if (!m || m.status === "NEEDS_DRAFT") throw new HttpError(409, "Gere um rascunho antes de publicar.");
+    if (body.publish && !body.force) {
+      const views = await buildViews(cityId, m.occurrences);
+      const warnings = views.flatMap((o) =>
+        o.assignments
+          .filter((a) => !a.withdrawn && a.warnings.length > 0)
+          .map((a) => ({ date: o.date, slotId: o.slotId, guideName: a.guideName, codes: a.warnings.map((w) => w.code) })),
+      );
+      const missingTotal = views.reduce((s, o) => s + o.missing, 0);
+      if (warnings.length > 0 || missingTotal > 0)
+        throw new HttpError(409, "O mês tem avisos por resolver.", { publishCheck: { warningCount: warnings.length, missingTotal, warnings: warnings.slice(0, 20) } });
+    }
     await prisma.monthSchedule.update({
       where: { id: m.id },
       data: body.publish ? { status: "PUBLISHED", publishedAt: new Date() } : { status: "DRAFT", publishedAt: null },
@@ -158,6 +172,17 @@ export const monthRoutes = async (app: FastifyInstance): Promise<void> => {
     return { date, monthStatus: month?.status ?? "NEEDS_DRAFT", occurrences: await buildViews(cityId, rows) };
   });
 
+  app.post("/cities/:cityId/days/:date/confirm", async (req) => {
+    await requireAdmin(req);
+    const { cityId, date } = z.object({ cityId: z.string(), date: isoDate }).parse(req.params);
+    const { confirmed } = z.object({ confirmed: z.boolean() }).parse(req.body);
+    const r = await prisma.slotOccurrence.updateMany({
+      where: { date: fromIso(date), status: "ACTIVE", needed: { gt: 0 }, slot: { tour: { cityId } } },
+      data: { adminConfirmedAt: confirmed ? new Date() : null },
+    });
+    return { count: r.count };
+  });
+
   app.get("/me/schedule", async (req) => {
     const u = await requireUser(req);
     const { year, month } = ymOnly.parse(req.query);
@@ -172,11 +197,20 @@ export const monthRoutes = async (app: FastifyInstance): Promise<void> => {
       include: { assignments: { include: { guide: { select: { id: true, name: true } } } } },
       orderBy: [{ date: "asc" }, { slot: { startMinutes: "asc" } }],
     });
+    const [slots, settings] = await Promise.all([loadSlots(prisma, u.cityId), loadSettings(prisma)]);
+    const slotById = new Map(slots.map((s) => [s.id, s]));
+    const now = new Date();
     const items = rows.flatMap((o) => {
       const mine = o.assignments.find((a) => a.guideId === u.id);
       if (!mine || (mine.withdrawn && o.status === "ACTIVE")) return [];
+      const slot = slotById.get(o.slotId);
+      const win = slot && o.status === "ACTIVE" ? confirmWindow(now, toIso(o.date), slot.startMinutes, slot.durationMin, settings.confirmWindowHours) : null;
       return [
         {
+          assignmentId: mine.id,
+          confirmedAt: mine.confirmedAt ? mine.confirmedAt.toISOString() : null,
+          confirm: win ? { state: win.state, opensAt: win.opensAt.toISOString() } : null,
+          adminConfirmed: o.adminConfirmedAt !== null && o.status === "ACTIVE",
           occurrenceId: o.id,
           slotId: o.slotId,
           date: toIso(o.date),

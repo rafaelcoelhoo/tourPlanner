@@ -3,6 +3,8 @@ import {
   DEFAULT_SETTINGS,
   checkAssignment,
   computeStats,
+  confirmWindow,
+  zonedInstant,
   daysOfMonth,
   generateSchedule,
   type AssignmentInfo,
@@ -139,6 +141,19 @@ describe("geração", () => {
     expect(Math.abs(sh.ratio - sf.ratio)).toBeLessThan(0.1);
   });
 
+  it("proporcionalidade também quando a disponibilidade acaba a meio do mês", () => {
+    const s = slot("s1", "10:30");
+    const dates = daysOfMonth(2026, 10);
+    const occs = dates.map((d) => occ("s1", d, 2));
+    // A só está disponível 12 dias (indisponível de 13 a 31); B, C e D o mês todo.
+    const early = guide("A", undefined, { unavailabilities: [{ startDate: "2026-10-13", endDate: "2026-10-31", period: "FULL_DAY" }] });
+    const r = run([s], occs, [early, guide("B"), guide("C"), guide("D")], dates);
+    const st = (id: string) => r.stats.find((x) => x.guideId === id)!;
+    expect(st("A").availableDays).toBe(12);
+    const ratios = ["A", "B", "C", "D"].map((id) => st(id).ratio);
+    expect(Math.max(...ratios) - Math.min(...ratios)).toBeLessThan(0.15);
+  });
+
   it("guia que só faz alguns secundários só recebe esses", () => {
     const hp = slot("hp", "10:00", "hp", "EN", "SECONDARY");
     const br = slot("br", "15:30", "braga", "EN", "SECONDARY");
@@ -191,5 +206,24 @@ describe("geração", () => {
     expect(generateSchedule(input)).toEqual(generateSchedule(input));
     const locked = generateSchedule({ ...input, locked: [{ occurrenceId: "s1@" + D1, guideId: "b" }] });
     expect(locked.assignments).toEqual([]);
+  });
+});
+
+describe("janela de confirmação", () => {
+  it("converte hora local de Lisboa para UTC respeitando o horário de verão", () => {
+    expect(zonedInstant("2026-01-15", 10 * 60).toISOString()).toBe("2026-01-15T10:00:00.000Z"); // inverno: UTC+0
+    expect(zonedInstant("2026-07-15", 10 * 60).toISOString()).toBe("2026-07-15T09:00:00.000Z"); // verão: UTC+1
+    expect(zonedInstant("2026-03-28", 10 * 60).toISOString()).toBe("2026-03-28T10:00:00.000Z"); // véspera da mudança
+    expect(zonedInstant("2026-03-29", 10 * 60).toISOString()).toBe("2026-03-29T09:00:00.000Z"); // dia da mudança (01:00 UTC)
+    expect(zonedInstant("2026-10-25", 10 * 60).toISOString()).toBe("2026-10-25T10:00:00.000Z"); // fim do horário de verão
+  });
+
+  it("abre 3 horas antes do início e fecha no fim do tour", () => {
+    const w = (iso: string) => confirmWindow(new Date(iso), "2026-01-15", 10 * 60, 150, 3).state;
+    expect(w("2026-01-15T06:59:00.000Z")).toBe("NOT_YET");
+    expect(w("2026-01-15T07:00:00.000Z")).toBe("OPEN");
+    expect(w("2026-01-15T10:00:00.000Z")).toBe("OPEN");
+    expect(w("2026-01-15T12:30:00.000Z")).toBe("OPEN");
+    expect(w("2026-01-15T12:31:00.000Z")).toBe("ENDED");
   });
 });

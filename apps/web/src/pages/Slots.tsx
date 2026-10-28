@@ -39,6 +39,26 @@ export const SlotsPage = () => {
     setForm(null);
   };
 
+  const slotForm = form && (
+    <form className="card slot-edit" onSubmit={(e) => void submit(e)}>
+            <div className="row">
+              <label>{tr("slots.tour")}<select value={form.tourId} onChange={(e) => setForm({ ...form, tourId: e.target.value })}>{c.tours.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
+              <label>{tr("slots.language")}<select value={form.languageId} onChange={(e) => setForm({ ...form, languageId: e.target.value })}>{c.languages.map((l) => <option key={l.id} value={l.id}>{languageName(l.code, l.name)}</option>)}</select></label>
+              <label>{tr("slots.time")}<input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} required /></label>
+              <label>{tr("slots.duration")}<input type="number" min={15} value={form.durationMin} onChange={(e) => setForm({ ...form, durationMin: Number(e.target.value) })} /></label>
+              <label>{tr("slots.defaultGuides")}<input type="number" min={0} value={form.defaultNeeded} onChange={(e) => setForm({ ...form, defaultNeeded: Number(e.target.value) })} /></label>
+            </div>
+            <div className="chips" style={{ margin: "10px 0" }}>
+              {Array.from({ length: 7 }, (_, i) => weekdayShort(i)).map((w, i) => {
+                const on = form.weekdays.includes(i + 1);
+                return <button type="button" key={w} className={`chip ${on ? "on" : ""}`} onClick={() => setForm({ ...form, weekdays: on ? form.weekdays.filter((x) => x !== i + 1) : [...form.weekdays, i + 1] })}>{w}</button>;
+              })}
+            </div>
+            <label className="row"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> {tr("slots.active")}</label>
+            <div className="row"><button className="primary">{tr("save")}</button><button type="button" onClick={() => setForm(null)}>{tr("cancel")}</button></div>
+          </form>
+  );
+
   return (
     <div>
       <h1>{tr("slots.title")}{city ? ` · ${city.name}` : ""}</h1>
@@ -80,38 +100,24 @@ export const SlotsPage = () => {
           <label>{tr("slots.minGap")}<input type="number" min={0} value={st.minGapMinutes} onChange={(e) => setSettings({ ...st, minGapMinutes: Number(e.target.value) })} /></label>
           <label>{tr("slots.maxPerDay")}<input type="number" min={1} value={st.maxToursPerDay} onChange={(e) => setSettings({ ...st, maxToursPerDay: Number(e.target.value) })} /></label>
           <label>{tr("slots.defaultDuration")}<input type="number" min={15} value={st.defaultDurationMin} onChange={(e) => setSettings({ ...st, defaultDurationMin: Number(e.target.value) })} /></label>
+          <label>{tr("slots.confirmWindow")}<input type="number" min={1} max={48} value={st.confirmWindowHours} onChange={(e) => setSettings({ ...st, confirmWindowHours: Number(e.target.value) })} /></label>
           <button disabled={!settings} onClick={() => void run(() => put("/settings", settings), tr("slots.rulesSaved"))}>{tr("save")}</button>
         </div>
       </div>
 
       <div className="row end"><h2>{tr("slots.count", { n: c.slots.length })}</h2><button className="primary" onClick={() => setForm(blank())}>{tr("slots.new")}</button></div>
-      {form && (
-        <form className="card" onSubmit={(e) => void submit(e)}>
-          <div className="row">
-            <label>{tr("slots.tour")}<select value={form.tourId} onChange={(e) => setForm({ ...form, tourId: e.target.value })}>{c.tours.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
-            <label>{tr("slots.language")}<select value={form.languageId} onChange={(e) => setForm({ ...form, languageId: e.target.value })}>{c.languages.map((l) => <option key={l.id} value={l.id}>{languageName(l.code, l.name)}</option>)}</select></label>
-            <label>{tr("slots.time")}<input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} required /></label>
-            <label>{tr("slots.duration")}<input type="number" min={15} value={form.durationMin} onChange={(e) => setForm({ ...form, durationMin: Number(e.target.value) })} /></label>
-            <label>{tr("slots.defaultGuides")}<input type="number" min={0} value={form.defaultNeeded} onChange={(e) => setForm({ ...form, defaultNeeded: Number(e.target.value) })} /></label>
-          </div>
-          <div className="chips" style={{ margin: "10px 0" }}>
-            {Array.from({ length: 7 }, (_, i) => weekdayShort(i)).map((w, i) => {
-              const on = form.weekdays.includes(i + 1);
-              return <button type="button" key={w} className={`chip ${on ? "on" : ""}`} onClick={() => setForm({ ...form, weekdays: on ? form.weekdays.filter((x) => x !== i + 1) : [...form.weekdays, i + 1] })}>{w}</button>;
-            })}
-          </div>
-          <label className="row"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> {tr("slots.active")}</label>
-          <div className="row"><button className="primary">{tr("save")}</button><button type="button" onClick={() => setForm(null)}>{tr("cancel")}</button></div>
-        </form>
-      )}
+      {form && !form.id && slotForm}
       <div className="card list">
         {sortSlots(c.slots, c).map((s) => (
-          <div key={s.id} className="row end">
-            <div>
-              <strong>{slotLabel(s, c)}</strong> {!s.active && <span className="badge">{tr("slots.inactive")}</span>}
-              <div className="muted">{tr("slots.summary", { days: Array.from({ length: 7 }, (_, i) => weekdayShort(i)).filter((_, i) => s.weekdays.includes(i + 1)).join(" ") || "—", min: s.durationMin, n: s.defaultNeeded })}</div>
+          <div key={s.id}>
+            <div className="row end">
+              <div>
+                <strong>{slotLabel(s, c)}</strong> {s.active ? <span className="badge published">{tr("slots.active")}</span> : <span className="badge">{tr("slots.inactive")}</span>}
+                <div className="muted">{tr("slots.summary", { days: Array.from({ length: 7 }, (_, i) => weekdayShort(i)).filter((_, i) => s.weekdays.includes(i + 1)).join(" ") || "—", min: s.durationMin, n: s.defaultNeeded })}</div>
+              </div>
+              <button disabled={form?.id === s.id} onClick={() => setForm({ id: s.id, tourId: s.tourId, languageId: s.languageId, time: fmtTime(s.startMinutes), durationMin: s.durationMin, weekdays: s.weekdays, defaultNeeded: s.defaultNeeded, active: s.active })}>{tr("edit")}</button>
             </div>
-            <button onClick={() => setForm({ id: s.id, tourId: s.tourId, languageId: s.languageId, time: fmtTime(s.startMinutes), durationMin: s.durationMin, weekdays: s.weekdays, defaultNeeded: s.defaultNeeded, active: s.active })}>{tr("edit")}</button>
+            {form?.id === s.id && <div style={{ marginTop: 10 }}>{slotForm}</div>}
           </div>
         ))}
       </div>

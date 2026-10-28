@@ -1,0 +1,2 @@
+ALTER TABLE "Assignment" ADD COLUMN "confirmedAt" TIMESTAMP(3);
+ALTER TABLE "Settings" ADD COLUMN "confirmWindowHours" INTEGER NOT NULL DEFAULT 3;

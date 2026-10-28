@@ -1,7 +1,13 @@
 import { currentLang } from "./i18n";
 
+export interface PublishCheck {
+  warningCount: number;
+  missingTotal: number;
+  warnings: { date: string; slotId: string; guideName: string; codes: string[] }[];
+}
+
 export class ApiError extends Error {
-  constructor(message: string, public status: number, public details?: { violations?: { code: string; message: string }[] }) {
+  constructor(message: string, public status: number, public details?: { violations?: { code: string; message: string }[]; publishCheck?: PublishCheck }) {
     super(message);
   }
 }

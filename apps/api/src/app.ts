@@ -30,6 +30,8 @@ export const buildApp = async (): Promise<FastifyInstance> => {
     }
     if (err instanceof HttpError) return reply.status(err.statusCode).send({ error: translate(err.message, lang), details: err.details });
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") return reply.status(404).send({ error: translate("Não encontrado.", lang) });
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status !== undefined && status >= 400 && status < 500) return reply.status(status).send({ error: translate("Dados inválidos.", lang) });
     app.log.error(err);
     return reply.status(500).send({ error: translate("Erro interno.", lang) });
   });

@@ -87,7 +87,7 @@ export const GuidesPage = () => {
               {hasSecondary && g.status !== "INVITED" && g.secondaryCount === 0 && <div className="warnline">{t("guides.noSecondary")}</div>}
             </div>
             <div className="row">
-              <span className="badge">{t(`guides.${g.status}`)}</span>
+              <span className={`badge ${g.status === "ACTIVE" ? "published" : ""}`}>{t(`guides.${g.status}`)}</span>
               {g.status === "INVITED" && <button onClick={() => void reinvite(g)}>{t("guides.newLink")}</button>}
               {g.status === "ACTIVE" && <button onClick={() => void resetLink(g)}>{t("guides.resetLink")}</button>}
               {g.status !== "INVITED" && <button onClick={() => void toggle(g)}>{g.status === "DISABLED" ? t("guides.activate") : t("guides.deactivate")}</button>}

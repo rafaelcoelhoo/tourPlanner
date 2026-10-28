@@ -47,11 +47,11 @@ enum AssignmentSource {
 }
 
 model City {
-  id      String          @id @default(cuid())
-  name    String          @unique
-  tours   Tour[]
-  users   User[]
-  months  MonthSchedule[]
+  id     String          @id @default(cuid())
+  name   String          @unique
+  tours  Tour[]
+  users  User[]
+  months MonthSchedule[]
 }
 
 model User {
@@ -182,6 +182,7 @@ model Settings {
   minGapMinutes        Int @default(60)
   maxToursPerDay       Int @default(2)
   defaultDurationMin   Int @default(150)
+  confirmWindowHours   Int @default(3)
 }
 
 model MonthSchedule {
@@ -200,16 +201,17 @@ model MonthSchedule {
 }
 
 model SlotOccurrence {
-  id          String           @id @default(cuid())
-  monthId     String
-  month       MonthSchedule    @relation(fields: [monthId], references: [id], onDelete: Cascade)
-  slotId      String
-  slot        TourSlot         @relation(fields: [slotId], references: [id])
-  date        DateTime         @db.Date
-  status      OccurrenceStatus @default(ACTIVE)
-  needed      Int
-  note        String?
-  assignments Assignment[]
+  id               String           @id @default(cuid())
+  monthId          String
+  month            MonthSchedule    @relation(fields: [monthId], references: [id], onDelete: Cascade)
+  slotId           String
+  slot             TourSlot         @relation(fields: [slotId], references: [id])
+  date             DateTime         @db.Date
+  status           OccurrenceStatus @default(ACTIVE)
+  needed           Int
+  note             String?
+  adminConfirmedAt DateTime?
+  assignments      Assignment[]
 
   @@unique([slotId, date])
   @@index([monthId, date])
@@ -223,6 +225,7 @@ model Assignment {
   guide            User             @relation(fields: [guideId], references: [id])
   withdrawn        Boolean          @default(false)
   withdrawnAt      DateTime?
+  confirmedAt      DateTime?
   source           AssignmentSource @default(GENERATED)
   overrideWarnings Json?
   createdAt        DateTime         @default(now())

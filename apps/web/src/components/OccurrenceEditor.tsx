@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { ApiError, del, get, patch, post } from "../api";
 import { errMsg } from "../format";
 import { useI18n } from "../i18n";
+import { useConfirm } from "./ConfirmDialog";
 import type { Candidate, OccurrenceView } from "../types";
 
 interface Props { occ: OccurrenceView; onChanged: () => void | Promise<void> }
 
 export const OccurrenceEditor = ({ occ, onChanged }: Props) => {
   const { t, violation } = useI18n();
+  const confirm = useConfirm();
   const [cands, setCands] = useState<Candidate[]>([]);
   const [guideId, setGuideId] = useState("");
   const [note, setNote] = useState(occ.note ?? "");
@@ -18,8 +20,12 @@ export const OccurrenceEditor = ({ occ, onChanged }: Props) => {
   useEffect(() => {
     setNote(occ.note ?? "");
     setNeeded(occ.needed);
+  }, [occ.id, occ.note, occ.needed]);
+
+  const assignmentsKey = occ.assignments.map((a) => `${a.id}:${a.withdrawn}`).join(",");
+  useEffect(() => {
     get<Candidate[]>(`/occurrences/${occ.id}/candidates`).then(setCands).catch(() => setCands([]));
-  }, [occ]);
+  }, [occ.id, assignmentsKey, occ.status]);
 
   const run = async (fn: () => Promise<unknown>) => {
     setError("");
@@ -35,7 +41,17 @@ export const OccurrenceEditor = ({ occ, onChanged }: Props) => {
     run(async () => {
       const c = cands.find((x) => x.guideId === guideId);
       if (!c) return;
-      if (c.violations.length > 0 && !window.confirm(t("occ.confirmViolations", { list: c.violations.map((v) => violation(v.code)).join("\n- ") }))) return;
+      if (
+        c.violations.length > 0 &&
+        !(await confirm({
+          title: t("occ.confirmTitle"),
+          items: c.violations.map((v) => violation(v.code)),
+          question: t("dlg.anyway"),
+          confirmLabel: t("add"),
+          tone: "warning",
+        }))
+      )
+        return;
       try {
         await post(`/occurrences/${occ.id}/assignments`, { guideId, override: c.violations.length > 0 });
       } catch (e) {
@@ -62,6 +78,8 @@ export const OccurrenceEditor = ({ occ, onChanged }: Props) => {
             <div className="row end">
               <span className={a.withdrawn ? "nm w" : ""}>
                 {a.guideName} {occ.status === "NO_DEMAND" && t("nt")} {a.source === "MANUAL" && <span className="muted">{t("occ.manual")}</span>}
+                {a.confirmState === "CONFIRMED" && <span className="badge published" style={{ marginLeft: 6 }}>✓ {t("confirm.byGuide")}</span>}
+                {a.confirmState === "PENDING" && <span className="badge draft" style={{ marginLeft: 6 }}>○ {t("confirm.pending")}</span>}
               </span>
               <span className="row">
                 <button onClick={() => void run(() => patch(`/assignments/${a.id}`, { withdrawn: !a.withdrawn }))}>{a.withdrawn ? t("occ.restore") : t("occ.withdraw")}</button>
@@ -93,6 +111,11 @@ export const OccurrenceEditor = ({ occ, onChanged }: Props) => {
       )}
       <h2>{t("occ.stateNote")}</h2>
       <div className="row">
+        {occ.status === "ACTIVE" && (
+          <button className={occ.adminConfirmed ? "" : "blue"} onClick={() => void run(() => patch(`/occurrences/${occ.id}`, { adminConfirmed: !occ.adminConfirmed }))}>
+            {occ.adminConfirmed ? t("ac.undo") : t("ac.confirm")}
+          </button>
+        )}
         <button onClick={() => void run(() => patch(`/occurrences/${occ.id}`, { status: occ.status === "ACTIVE" ? "NO_DEMAND" : "ACTIVE" }))}>
           {occ.status === "ACTIVE" ? t("occ.markNT") : t("occ.reactivate")}
         </button>

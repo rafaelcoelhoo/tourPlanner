@@ -10,7 +10,7 @@ interface NeedsData { status: string; confirmed: boolean; cells: { slotId: strin
 
 export const NeedsPage = () => {
   const { cityId, ym, setYm } = useCity();
-  const { t, weekdayInitial } = useI18n();
+  const { t, weekdayShort } = useI18n();
   const cat = useCatalog();
   const base = `/cities/${cityId}/months/${ym.year}/${ym.month}/needs`;
   const needs = useFetch<NeedsData>(cityId ? base : null);
@@ -60,7 +60,7 @@ export const NeedsPage = () => {
       {msg && <p className="muted">{msg}</p>}
       <div className="scroll matrix">
         <table className="grid">
-          <thead><tr><th className="sl">{t("grid.slot")}</th>{dates.map((d) => <th key={d}>{d.slice(8)}<br />{weekdayInitial(weekdayIdx(d))}</th>)}</tr></thead>
+          <thead><tr><th className="sl">{t("grid.slot")}</th>{dates.map((d) => <th key={d}>{d.slice(8)}<br />{weekdayShort(weekdayIdx(d))}</th>)}</tr></thead>
           <tbody>
             {slots.map((s) => (
               <tr key={s.id}>

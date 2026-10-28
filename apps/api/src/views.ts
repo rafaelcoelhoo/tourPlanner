@@ -1,4 +1,4 @@
-import { checkAssignment, type DayTour, type SlotInfo, type Violation } from "@schedule/core";
+import { checkAssignment, confirmWindow, type DayTour, type SlotInfo, type Violation } from "@schedule/core";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { loadGuides, loadSettings, loadSlots } from "./context";
@@ -14,6 +14,9 @@ export interface AssignmentView {
   withdrawn: boolean;
   source: "GENERATED" | "MANUAL";
   warnings: Violation[];
+  confirmedAt: string | null;
+  /** CONFIRMED: já confirmou; PENDING: a janela abriu e ainda não confirmou; NONE: ainda não é altura. */
+  confirmState: "NONE" | "CONFIRMED" | "PENDING";
 }
 
 export interface OccurrenceView {
@@ -24,12 +27,15 @@ export interface OccurrenceView {
   needed: number;
   note: string | null;
   missing: number;
+  /** A agência confirmou que o tour vai acontecer (fundo azul, como no Excel). */
+  adminConfirmed: boolean;
   assignments: AssignmentView[];
 }
 
 /** Calcula avisos (violações) por atribuição, no contexto do mesmo dia. */
 export const buildViews = async (cityId: string, rows: OccRow[]): Promise<OccurrenceView[]> => {
   const [guides, slots, settings] = await Promise.all([loadGuides(prisma, cityId), loadSlots(prisma, cityId), loadSettings(prisma)]);
+  const now = new Date();
   const guideById = new Map(guides.map((g) => [g.id, g]));
   const slotById = new Map<string, SlotInfo>(slots.map((s) => [s.id, s]));
   const byGuideDay = new Map<string, DayTour[]>();
@@ -53,6 +59,7 @@ export const buildViews = async (cityId: string, rows: OccRow[]): Promise<Occurr
       status: o.status,
       needed: o.needed,
       note: o.note,
+      adminConfirmed: o.adminConfirmedAt !== null && o.status === "ACTIVE" && o.needed > 0,
       missing: o.status === "ACTIVE" ? Math.max(0, o.needed - active) : 0,
       assignments: o.assignments.map((a) => {
         const g = guideById.get(a.guideId);
@@ -63,6 +70,11 @@ export const buildViews = async (cityId: string, rows: OccRow[]): Promise<Occurr
             ? checkAssignment(g, o.id, slot, date, same, settings)
             : [{ code: "UNAVAILABLE" as const, message: "Guia inativo ou de outra cidade." }]
           : [];
+        let confirmState: AssignmentView["confirmState"] = "NONE";
+        if (counts) {
+          if (a.confirmedAt) confirmState = "CONFIRMED";
+          else if (slot && confirmWindow(now, date, slot.startMinutes, slot.durationMin, settings.confirmWindowHours).state !== "NOT_YET") confirmState = "PENDING";
+        }
         return {
           id: a.id,
           guideId: a.guideId,
@@ -70,6 +82,8 @@ export const buildViews = async (cityId: string, rows: OccRow[]): Promise<Occurr
           withdrawn: a.withdrawn,
           source: a.source,
           warnings,
+          confirmedAt: a.confirmedAt ? a.confirmedAt.toISOString() : null,
+          confirmState,
         };
       }),
     };

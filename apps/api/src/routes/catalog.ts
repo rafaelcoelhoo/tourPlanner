@@ -98,6 +98,7 @@ export const catalogRoutes = async (app: FastifyInstance): Promise<void> => {
         minGapMinutes: z.number().int().min(0).max(600),
         maxToursPerDay: z.number().int().min(1).max(6),
         defaultDurationMin: z.number().int().min(15).max(24 * 60),
+        confirmWindowHours: z.number().int().min(1).max(48),
       })
       .parse(req.body);
     await prisma.settings.upsert({ where: { id: 1 }, update: body, create: { id: 1, ...body } });

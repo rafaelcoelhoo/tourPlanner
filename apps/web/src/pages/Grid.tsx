@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { post } from "../api";
+import { ApiError, post, type PublishCheck } from "../api";
+import { Agenda } from "../components/Agenda";
 import { Modal } from "../components/Modal";
 import { MonthNav } from "../components/MonthNav";
 import { OccurrenceEditor } from "../components/OccurrenceEditor";
+import { useConfirm } from "../components/ConfirmDialog";
 import { useCity } from "../city";
 import { useCatalog, useFetch } from "../hooks";
-import { daysInMonth, errMsg, slotLabel, sortSlots, weekdayIdx } from "../format";
+import { daysInMonth, errMsg, slotLabel, sortSlots, today as todayIso, weekdayIdx } from "../format";
 import { useI18n } from "../i18n";
 import type { MonthView, OccurrenceView } from "../types";
 
@@ -15,8 +17,18 @@ export const GridPage = () => {
   const [weekIdx, setWeekIdx] = useState<number | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
-  const [showStats, setShowStats] = useState(false);
-  const { t, fmtDate, weekdayInitial } = useI18n();
+  const [view, setViewState] = useState<"table" | "agenda">(() => {
+    const saved = localStorage.getItem("gridView");
+    if (saved === "table" || saved === "agenda") return saved;
+    return window.matchMedia("(max-width: 699px)").matches ? "agenda" : "table";
+  });
+  const setView = (v: "table" | "agenda") => {
+    localStorage.setItem("gridView", v);
+    setViewState(v);
+  };
+  const [agendaDay, setAgendaDay] = useState<string | null>(null);
+  const { t, fmtDate, weekdayShort, violation } = useI18n();
+  const confirm = useConfirm();
   const cat = useCatalog();
   const base = `/cities/${cityId}/months/${ym.year}/${ym.month}`;
   const month = useFetch<MonthView>(cityId ? base : null);
@@ -32,6 +44,8 @@ export const GridPage = () => {
     return out;
   }, [monthDates]);
   const dates = weekIdx !== null ? (weeks[weekIdx] ?? monthDates) : monthDates;
+  const today = todayIso();
+  const selectedDay = agendaDay && monthDates.includes(agendaDay) ? agendaDay : monthDates.includes(today) ? today : (monthDates[0] ?? "");
   const slots = useMemo(() => {
     if (!cat.data) return [];
     const used = new Set((month.data?.occurrences ?? []).map((o) => o.slotId));
@@ -43,6 +57,38 @@ export const GridPage = () => {
   const m = month.data;
   const open = openId ? m.occurrences.find((o) => o.id === openId) : undefined;
   const missingTotal = m.occurrences.reduce((s, o) => s + o.missing, 0);
+  const warningCount = m.occurrences.reduce((s, o) => s + o.assignments.filter((a) => !a.withdrawn && a.warnings.length > 0).length, 0);
+
+  const publish = async () => {
+    const send = (force: boolean) => post(`${base}/publish`, { publish: true, force });
+    try {
+      await send(false);
+    } catch (e) {
+      const check: PublishCheck | undefined = e instanceof ApiError ? e.details?.publishCheck : undefined;
+      if (!check) throw e;
+      const slotName = (id: string) => {
+        const s = c.slots.find((x) => x.id === id);
+        return s ? slotLabel(s, c) : "?";
+      };
+      const lines = check.warnings.slice(0, 8).map((w) => `${fmtDate(w.date)} ${slotName(w.slotId)} · ${w.guideName}: ${w.codes.map((code) => violation(code as Parameters<typeof violation>[0])).join(", ")}`);
+      if (check.warningCount > lines.length) lines.push(t("publish.more", { n: check.warningCount - lines.length }));
+      const badges = [
+        check.warningCount > 0 ? t("publish.warnings", { n: check.warningCount }) : "",
+        check.missingTotal > 0 ? t("publish.missing", { n: check.missingTotal }) : "",
+      ].filter(Boolean);
+      const ok = await confirm({ title: t("publish.title"), badges, items: lines, question: t("publish.anyway"), confirmLabel: t("grid.publish"), tone: "warning" });
+      if (!ok) throw new Error("");
+      await send(true);
+    }
+  };
+
+  const generate = async () => {
+    if (!(await confirm({ title: t("grid.generate"), message: t("grid.generateConfirm"), confirmLabel: t("grid.generate") }))) return;
+    await act(async () => {
+      const r = await post<{ assigned: number; missingTotal: number }>(`${base}/generate`);
+      setMsg(t("grid.generated", { n: r.assigned, m: r.missingTotal }));
+    }, "");
+  };
 
   const act = async (fn: () => Promise<unknown>, ok: string) => {
     setMsg("");
@@ -59,7 +105,7 @@ export const GridPage = () => {
     if (!o || o.needed === 0) return "off";
     if (o.status === "NO_DEMAND") return "nt cell";
     const warn = o.assignments.some((a) => a.warnings.length > 0) ? " warnc" : "";
-    return `${o.missing ? "incomplete" : "complete"} cell${warn}`;
+    return `${o.adminConfirmed ? "ac" : o.missing ? "incomplete" : "complete"} cell${warn}`;
   };
 
   return (
@@ -71,43 +117,44 @@ export const GridPage = () => {
         </span>
       </div>
       <div className="row" style={{ margin: "10px 0" }}>
-        <button onClick={() => setWeekIdx(weekIdx !== null ? null : 0)}>
-          {weekIdx !== null ? t("grid.viewMonth") : t("grid.viewWeek")}
-        </button>
-        {weekIdx !== null && (
+        <div className="seg" role="group">
+          <button className={view === "table" ? "on" : ""} onClick={() => setView("table")}>{t("view.table")}</button>
+          <button className={view === "agenda" ? "on" : ""} onClick={() => setView("agenda")}>{t("view.agenda")}</button>
+        </div>
+        {view === "table" && (
+          <button onClick={() => setWeekIdx(weekIdx !== null ? null : 0)}>
+            {weekIdx !== null ? t("grid.viewMonth") : t("grid.viewWeek")}
+          </button>
+        )}
+        {view === "table" && weekIdx !== null && (
           <>
             <button disabled={weekIdx <= 0} onClick={() => setWeekIdx(Math.max(0, weekIdx - 1))}>{t("grid.prevWeek")}</button>
             <button disabled={weekIdx >= weeks.length - 1} onClick={() => setWeekIdx(Math.min(weeks.length - 1, weekIdx + 1))}>{t("grid.nextWeek")}</button>
           </>
         )}
         <Link to="/necessidades"><button>{t("grid.matrix")}</button></Link>
-        <button className="primary" disabled={!m.needsConfirmedAt || m.status === "PUBLISHED"}
-          onClick={() => window.confirm(t("grid.generateConfirm")) && void act(async () => {
-            const r = await post<{ assigned: number; missingTotal: number }>(`${base}/generate`);
-            setMsg(t("grid.generated", { n: r.assigned, m: r.missingTotal }));
-          }, "")}>{t("grid.generate")}</button>
+        <button className="primary" disabled={!m.needsConfirmedAt || m.status === "PUBLISHED"} onClick={() => void generate()}>{t("grid.generate")}</button>
         {m.status !== "NEEDS_DRAFT" && (
-          <button onClick={() => void act(() => post(`${base}/publish`, { publish: m.status !== "PUBLISHED" }), m.status === "PUBLISHED" ? t("grid.unpublishedMsg") : t("grid.publishedMsg"))}>
+          <button onClick={() => void act(() => (m.status === "PUBLISHED" ? post(`${base}/publish`, { publish: false }) : publish()), m.status === "PUBLISHED" ? t("grid.unpublishedMsg") : t("grid.publishedMsg"))}>
             {m.status === "PUBLISHED" ? t("grid.unpublish") : t("grid.publish")}
           </button>
         )}
-        <button onClick={() => setShowStats(!showStats)}>{t("grid.load")}</button>
       </div>
       {!m.needsConfirmedAt && <p className="error">{t("grid.needsNotConfirmed")}</p>}
       {m.occurrences.length > 0 && <p className={missingTotal ? "miss" : "muted"}>{missingTotal ? t("grid.missingTotal", { n: missingTotal }) : t("grid.allComplete")}</p>}
+      {warningCount > 0 && <p className="miss">{t("grid.warningCount", { n: warningCount })}</p>}
+      {m.occurrences.length > 0 && <p className="muted">{t("ac.legend")}</p>}
+      {m.status === "PUBLISHED" && <p className="muted">{t("confirm.legend", { h: c.settings.confirmWindowHours })}</p>}
       {msg && <p className="muted">{msg}</p>}
-      {showStats && (
-        <div className="card scroll">
-          <table className="grid"><thead><tr><th className="sl">{t("stats.guide")}</th><th>{t("stats.primary")}</th><th>{t("stats.secondary")}</th><th>{t("stats.availableDays")}</th><th>{t("stats.ratio")}</th></tr></thead>
-            <tbody>{m.stats.map((s) => <tr key={s.guideId}><th className="sl">{s.name}</th><td>{s.primary}</td><td>{s.secondary}</td><td>{s.availableDays}</td><td>{s.ratio.toFixed(2)}</td></tr>)}</tbody></table>
-        </div>
+      {view === "agenda" && (
+        <Agenda dates={monthDates} occurrences={m.occurrences} catalog={c} selected={selectedDay} today={today} onSelect={setAgendaDay} onOpen={setOpenId} />
       )}
-      <div className="scroll">
+      {view === "table" && <div className="scroll">
         <table className="grid">
           <thead>
             <tr>
               <th className="sl">{t("grid.slot")}</th>
-              {dates.map((d) => <th key={d} className={weekdayIdx(d) === 0 ? "we" : ""}>{weekIdx !== null ? fmtDate(d) : `${d.slice(8)} ${weekdayInitial(weekdayIdx(d))}`}</th>)}
+              {dates.map((d) => <th key={d} className={weekdayIdx(d) === 0 ? "we" : ""}>{weekIdx !== null ? fmtDate(d) : `${d.slice(8)} ${weekdayShort(weekdayIdx(d))}`}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -122,7 +169,7 @@ export const GridPage = () => {
                       {o && o.needed > 0 && (
                         <>
                           {o.assignments.map((a) => (
-                            <span key={a.id} className={`nm ${a.withdrawn ? "w" : ""} ${a.warnings.length ? "bad" : ""}`}>{a.guideName}{o.status === "NO_DEMAND" ? ` ${t("nt")}` : ""}</span>
+                            <span key={a.id} className={`nm ${a.withdrawn ? "w" : ""} ${a.warnings.length ? "bad" : ""} ${a.confirmState === "CONFIRMED" ? "cf" : a.confirmState === "PENDING" ? "pend" : ""}`}>{a.guideName}{o.status === "NO_DEMAND" ? ` ${t("nt")}` : ""}</span>
                           ))}
                           {o.status === "ACTIVE" && o.missing > 0 && <span className="miss">{t("grid.missingShort", { n: o.missing })}</span>}
                           {o.status === "NO_DEMAND" && o.assignments.length === 0 && <span className="nm">{t("nt")}</span>}
@@ -136,7 +183,7 @@ export const GridPage = () => {
             ))}
           </tbody>
         </table>
-      </div>
+      </div>}
       {open && (
         <Modal title={`${slotLabel(cat.data.slots.find((s) => s.id === open.slotId) ?? cat.data.slots[0]!, c)} · ${fmtDate(open.date)}`} onClose={() => setOpenId(null)}>
           <OccurrenceEditor occ={open} onChanged={() => month.reload()} />

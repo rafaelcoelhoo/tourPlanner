@@ -13,13 +13,14 @@ import { fromIso, toIso } from "./util";
 
 type Db = Tx | typeof prisma;
 
-export const loadSettings = async (db: Db): Promise<Settings & { defaultDurationMin: number }> => {
+export const loadSettings = async (db: Db): Promise<Settings & { defaultDurationMin: number; confirmWindowHours: number }> => {
   const s = await db.settings.findUnique({ where: { id: 1 } });
   return {
     morningCutoffMinutes: s?.morningCutoffMinutes ?? DEFAULT_SETTINGS.morningCutoffMinutes,
     minGapMinutes: s?.minGapMinutes ?? DEFAULT_SETTINGS.minGapMinutes,
     maxToursPerDay: s?.maxToursPerDay ?? DEFAULT_SETTINGS.maxToursPerDay,
     defaultDurationMin: s?.defaultDurationMin ?? 150,
+    confirmWindowHours: s?.confirmWindowHours ?? 3,
   };
 };
 
