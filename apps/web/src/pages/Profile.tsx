@@ -7,13 +7,15 @@ import { useCatalog, useFetch } from "../hooks";
 import { errMsg, fmtTime, parseTime, slotLabel, sortSlots } from "../format";
 import { useI18n, type Key } from "../i18n";
 import { useConfirm } from "../components/ConfirmDialog";
+import { PasswordCard } from "../components/PasswordCard";
 import { PageHead } from "../components/PageHead";
 import type { Period } from "@schedule/core";
 import type { Profile } from "../types";
 
 type RestrictionKind = Period | "UNTIL" | "FROM";
 const RESTRICTION_KINDS: RestrictionKind[] = ["FULL_DAY", "MORNING", "AFTERNOON", "UNTIL", "FROM"];
-const PERIOD_KEYS: Period[] = ["FULL_DAY", "MORNING", "AFTERNOON"];
+type UnavKind = Period | "AFTER" | "BEFORE";
+const UNAV_KINDS: UnavKind[] = ["FULL_DAY", "MORNING", "AFTERNOON", "AFTER", "BEFORE"];
 
 export const ProfilePage = () => {
   const params = useParams();
@@ -25,9 +27,7 @@ export const ProfilePage = () => {
   const prof = useFetch<Profile>(`/guides/${id}/profile`);
   const cat = useCatalog(prof.data ? prof.data.cityId : null);
   const [msg, setMsg] = useState("");
-  const [un, setUn] = useState({ startDate: "", endDate: "", period: "FULL_DAY" as Period, slotId: "" });
-  const [pw, setPw] = useState({ current: "", next: "" });
-  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [un, setUn] = useState({ startDate: "", endDate: "", kind: "FULL_DAY" as UnavKind, time: "16:00", slotId: "" });
   const [rs, setRs] = useState({ weekday: 1, kind: "FULL_DAY" as RestrictionKind, time: "17:00" });
   const run = async (fn: () => Promise<unknown>) => {
     setMsg("");
@@ -35,7 +35,7 @@ export const ProfilePage = () => {
       await fn();
       await prof.reload();
     } catch (e) {
-      setMsg(errMsg(e));
+      await confirm({ title: tr("prof.errorTitle"), message: errMsg(e), infoOnly: true, confirmLabel: tr("dlg.ok"), tone: "warning" });
     }
   };
   const changeCity = async (cityId: string) => {
@@ -75,9 +75,17 @@ export const ProfilePage = () => {
     run(() => put(`/guides/${id}/qualifications`, { qualifications: has(t, l) ? p.qualifications.filter((q) => !(q.tourId === t && q.languageId === l)) : [...p.qualifications, { tourId: t, languageId: l }] }));
   const addUn = (e: FormEvent) => {
     e.preventDefault();
+    const timed = un.kind === "AFTER" || un.kind === "BEFORE";
     void run(async () => {
-      await post(`/guides/${id}/unavailabilities`, { startDate: un.startDate, endDate: un.endDate || un.startDate, period: un.period, slotId: un.slotId || null });
-      setUn({ startDate: "", endDate: "", period: "FULL_DAY", slotId: "" });
+      await post(`/guides/${id}/unavailabilities`, {
+        startDate: un.startDate,
+        endDate: un.endDate || un.startDate,
+        period: timed ? "FULL_DAY" : un.kind,
+        afterMinutes: un.kind === "AFTER" ? parseTime(un.time) : null,
+        beforeMinutes: un.kind === "BEFORE" ? parseTime(un.time) : null,
+        slotId: un.slotId || null,
+      });
+      setUn({ startDate: "", endDate: "", kind: "FULL_DAY", time: "16:00", slotId: "" });
     });
   };
   const addRs = (e: FormEvent) => {
@@ -91,16 +99,6 @@ export const ProfilePage = () => {
         notAfterMinutes: rs.kind === "UNTIL" ? parseTime(rs.time) : null,
       }),
     );
-  };
-  const changePw = async (e: FormEvent) => {
-    e.preventDefault();
-    try {
-      await post("/auth/password", pw);
-      setPw({ current: "", next: "" });
-      setPwMsg({ ok: true, text: tr("pw.done") });
-    } catch (err) {
-      setPwMsg({ ok: false, text: errMsg(err) });
-    }
   };
   const slotName = (sid: string) => {
     const s = c.slots.find((x) => x.id === sid);
@@ -130,7 +128,8 @@ export const ProfilePage = () => {
         <form className="row" onSubmit={addUn}>
           <label>{tr("prof.from")}<input type="date" value={un.startDate} onChange={(e) => setUn({ ...un, startDate: e.target.value })} required /></label>
           <label>{tr("prof.to")}<input type="date" value={un.endDate} min={un.startDate} onChange={(e) => setUn({ ...un, endDate: e.target.value })} /></label>
-          <label>{tr("prof.period")}<select value={un.period} onChange={(e) => setUn({ ...un, period: e.target.value as Period })}>{PERIOD_KEYS.map((k) => <option key={k} value={k}>{periodLabel(k)}</option>)}</select></label>
+          <label>{tr("prof.period")}<select value={un.kind} onChange={(e) => setUn({ ...un, kind: e.target.value as UnavKind })}>{UNAV_KINDS.map((k) => <option key={k} value={k}>{k === "AFTER" || k === "BEFORE" ? tr(`prof.ukind.${k}` as Key) : periodLabel(k)}</option>)}</select></label>
+          {(un.kind === "AFTER" || un.kind === "BEFORE") && <label>{tr("prof.hour")}<input type="time" value={un.time} onChange={(e) => setUn({ ...un, time: e.target.value })} required /></label>}
           <label>{tr("prof.slotOpt")}<select value={un.slotId} onChange={(e) => setUn({ ...un, slotId: e.target.value })}><option value="">{tr("prof.allSlots")}</option>{sortSlots(c.slots, c).map((s) => <option key={s.id} value={s.id}>{slotLabel(s, c)}</option>)}</select></label>
           <button className="primary">{tr("add")}</button>
         </form>
@@ -138,7 +137,7 @@ export const ProfilePage = () => {
           {p.unavailabilities.length === 0 && <div className="muted">{tr("prof.availableAll")}</div>}
           {p.unavailabilities.map((u) => (
             <div key={u.id} className="row end">
-              <span>{u.startDate === u.endDate ? u.startDate : `${u.startDate} → ${u.endDate}`} · {u.slotId ? slotName(u.slotId) : periodLabel(u.period)}</span>
+              <span>{u.startDate === u.endDate ? u.startDate : `${u.startDate} → ${u.endDate}`} · {u.slotId ? slotName(u.slotId) : u.afterMinutes != null ? tr("prof.ushow.AFTER", { t: fmtTime(u.afterMinutes) }) : u.beforeMinutes != null ? tr("prof.ushow.BEFORE", { t: fmtTime(u.beforeMinutes) }) : periodLabel(u.period)}</span>
               <button className="danger" onClick={() => void run(() => del(`/guides/${id}/unavailabilities/${u.id}`))}>{tr("remove")}</button>
             </div>
           ))}
@@ -162,17 +161,7 @@ export const ProfilePage = () => {
           ))}
         </div>
       </div>
-      {id === me?.id && (
-        <form className="card" onSubmit={(e) => void changePw(e)}>
-          <h2>{tr("pw.title")}</h2>
-          <div className="row">
-            <label>{tr("pw.current")}<input type="password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} required autoComplete="current-password" /></label>
-            <label>{tr("pw.next")}<input type="password" minLength={8} value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} required autoComplete="new-password" /></label>
-            <button className="primary">{tr("pw.submit")}</button>
-          </div>
-          {pwMsg && <p className={pwMsg.ok ? "ok" : "error"}>{pwMsg.text}</p>}
-        </form>
-      )}
+      {id === me?.id && <PasswordCard />}
     </div>
   );
 };

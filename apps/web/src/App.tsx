@@ -10,6 +10,7 @@ import { NeedsPage } from "./pages/Needs";
 import { DayPage } from "./pages/Day";
 import { GuidesPage } from "./pages/Guides";
 import { LoadPage } from "./pages/Load";
+import { AccountPage } from "./pages/Account";
 import { SlotsPage } from "./pages/Slots";
 import { ProfilePage } from "./pages/Profile";
 import { MySchedule } from "./pages/MySchedule";
@@ -30,7 +31,7 @@ const Layout = () => {
   if (!me) return <Navigate to="/login" replace />;
   const admin = me.role === "ADMIN";
   const links: [string, Key][] = admin
-    ? [["/grelha", "nav.schedule"], ["/dia", "nav.day"], ["/necessidades", "nav.matrix"], ["/carga", "nav.load"], ["/guias", "nav.guides"], ["/slots", "nav.slots"]]
+    ? [["/grelha", "nav.schedule"], ["/dia", "nav.day"], ["/necessidades", "nav.matrix"], ["/carga", "nav.load"], ["/guias", "nav.guides"], ["/slots", "nav.slots"], ["/conta", "nav.account"]]
     : [["/horario", "nav.schedule"], ["/perfil", "nav.profile"]];
   const navLinks = links.map(([to, label]) => (
     <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "active" : "")}>{t(label)}</NavLink>
@@ -99,6 +100,7 @@ export const App = () => {
             <Route path="/guias" element={<GuidesPage />} />
             <Route path="/guias/:id" element={<ProfilePage />} />
             <Route path="/slots" element={<SlotsPage />} />
+            <Route path="/conta" element={<AccountPage />} />
           </>
         ) : (
           <>

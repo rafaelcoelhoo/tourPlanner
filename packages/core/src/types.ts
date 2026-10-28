@@ -43,6 +43,10 @@ export interface UnavailabilityInfo {
   endDate: IsoDate;
   period: Period;
   slotId?: string | null;
+  /** Indisponível para tours que comecem depois desta hora (minutos desde as 00:00). */
+  afterMinutes?: number | null;
+  /** Indisponível para tours que comecem antes desta hora. */
+  beforeMinutes?: number | null;
 }
 
 export interface RestrictionInfo {

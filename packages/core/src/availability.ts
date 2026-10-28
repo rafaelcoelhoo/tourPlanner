@@ -17,7 +17,16 @@ export const blockReason = (
   const period = periodOf(slot.startMinutes, cutoff);
   for (const u of guide.unavailabilities) {
     if (!inRange(date, u.startDate, u.endDate)) continue;
-    if (u.slotId ? u.slotId === slot.id : covers(u.period, period)) return "UNAVAILABLE";
+    if (u.slotId) {
+      if (u.slotId === slot.id) return "UNAVAILABLE";
+      continue;
+    }
+    if (u.afterMinutes != null || u.beforeMinutes != null) {
+      if (u.afterMinutes != null && slot.startMinutes > u.afterMinutes) return "UNAVAILABLE";
+      if (u.beforeMinutes != null && slot.startMinutes < u.beforeMinutes) return "UNAVAILABLE";
+      continue;
+    }
+    if (covers(u.period, period)) return "UNAVAILABLE";
   }
   const wd = weekdayOf(date);
   for (const r of guide.restrictions) {
@@ -33,7 +42,13 @@ export const blockReason = (
 const periodFree = (guide: GuideInfo, date: IsoDate, target: "MORNING" | "AFTERNOON", cutoff: number): boolean => {
   const wd = weekdayOf(date);
   for (const u of guide.unavailabilities) {
-    if (!u.slotId && inRange(date, u.startDate, u.endDate) && covers(u.period, target)) return false;
+    if (u.slotId || !inRange(date, u.startDate, u.endDate)) continue;
+    if (u.afterMinutes != null || u.beforeMinutes != null) {
+      if (target === "AFTERNOON" && u.afterMinutes != null && u.afterMinutes < cutoff) return false;
+      if (target === "MORNING" && u.beforeMinutes != null && u.beforeMinutes >= cutoff) return false;
+      continue;
+    }
+    if (covers(u.period, target)) return false;
   }
   for (const r of guide.restrictions) {
     if (r.weekday !== wd || !covers(r.period, target)) continue;

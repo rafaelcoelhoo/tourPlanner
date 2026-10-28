@@ -51,6 +51,8 @@ export const loadGuides = async (db: Db, cityId: string, onlyIds?: string[]): Pr
       endDate: toIso(x.endDate),
       period: x.period,
       slotId: x.slotId,
+      afterMinutes: x.afterMinutes,
+      beforeMinutes: x.beforeMinutes,
     })),
     restrictions: u.recurringRestrictions.map((r) => ({
       weekday: r.weekday as Weekday,

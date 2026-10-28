@@ -132,6 +132,8 @@ export const guideRoutes = async (app: FastifyInstance): Promise<void> => {
         endDate: toIso(x.endDate),
         period: x.period,
         slotId: x.slotId,
+        afterMinutes: x.afterMinutes,
+        beforeMinutes: x.beforeMinutes,
         note: x.note,
       })),
       restrictions: u.recurringRestrictions,
@@ -173,7 +175,7 @@ export const guideRoutes = async (app: FastifyInstance): Promise<void> => {
     const { id } = idParam.parse(req.params);
     const u = await requireSelfOrAdmin(req, id);
     const body = z
-      .object({ startDate: isoDate, endDate: isoDate, period: period.default("FULL_DAY"), slotId: z.string().nullish(), note: z.string().max(200).nullish() })
+      .object({ startDate: isoDate, endDate: isoDate, period: period.default("FULL_DAY"), slotId: z.string().nullish(), note: z.string().max(200).nullish(), afterMinutes: minutes.nullish(), beforeMinutes: minutes.nullish() })
       .refine((b) => b.endDate >= b.startDate, "A data final não pode ser anterior à inicial.")
       .parse(req.body);
     await assertNotPublishedForGuide(u.role, id, body.startDate, body.endDate);

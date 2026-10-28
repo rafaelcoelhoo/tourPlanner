@@ -12,6 +12,7 @@ import type { MyItem } from "../types";
 export const MySchedule = () => {
   const { cityId, city, ym, setYm } = useCity();
   const [view, setView] = useState<"list" | "cal">("list");
+  const [showPast, setShowPast] = useState(false);
   const { t, fmtDate, languageName, weekdayShort } = useI18n();
   const cat = useCatalog();
   const sched = useFetch<{ items: MyItem[] }>(`/me/schedule?year=${ym.year}&month=${ym.month}`);
@@ -59,7 +60,9 @@ export const MySchedule = () => {
     );
   };
   const toConfirm = items.filter(needsConfirm);
-  const groups = [...items.reduce((m, i) => m.set(i.date, [...(m.get(i.date) ?? []), i]), new Map<string, MyItem[]>())];
+  const pastCount = items.filter((i) => i.date < todayIso()).length;
+  const listItems = showPast ? items : items.filter((i) => i.date >= todayIso());
+  const groups = [...listItems.reduce((m, i) => m.set(i.date, [...(m.get(i.date) ?? []), i]), new Map<string, MyItem[]>())];
   const openItems = items
     .filter((i) => i.status === "ACTIVE" && i.confirm?.state === "OPEN")
     .sort((a, b) => Number(Boolean(a.confirmedAt)) - Number(Boolean(b.confirmedAt)) || a.date.localeCompare(b.date));
@@ -80,6 +83,10 @@ export const MySchedule = () => {
       {view === "list" && toConfirm.length > 0 && <p className="banner">{t("confirm.banner", { n: toConfirm.length })}</p>}
       {confirmError && <p className="error">{confirmError}</p>}
       {items.length === 0 && !sched.loading && <p className="muted">{t("my.empty")}</p>}
+      {view === "list" && items.length > 0 && listItems.length === 0 && <p className="muted">{t("my.noUpcoming")}</p>}
+      {view === "list" && pastCount > 0 && (
+        <p><button className="link" onClick={() => setShowPast(!showPast)}>{showPast ? t("my.hidePast") : t("my.showPast", { n: pastCount })}</button></p>
+      )}
       {view === "list" ? (
         <div className="day-groups">
           {groups.map(([date, its]) => (

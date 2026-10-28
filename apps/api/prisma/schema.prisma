@@ -162,6 +162,8 @@ model Unavailability {
   slotId    String?
   slot      TourSlot? @relation(fields: [slotId], references: [id], onDelete: Cascade)
   note      String?
+  afterMinutes  Int?
+  beforeMinutes Int?
 
   @@index([userId, startDate, endDate])
 }

@@ -10,6 +10,8 @@ export interface ConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: "default" | "warning";
+  /** Só um botão (aviso informativo, sem escolha). */
+  infoOnly?: boolean;
 }
 
 type ConfirmFn = (opts: ConfirmOptions) => Promise<boolean>;
@@ -58,7 +60,7 @@ export const ConfirmProvider = ({ children }: { children: ReactNode }) => {
             )}
             {o.question && <p><strong>{o.question}</strong></p>}
             <div className="dlg-actions">
-              <button onClick={() => close(false)}>{o.cancelLabel ?? t("cancel")}</button>
+              {!o.infoOnly && <button onClick={() => close(false)}>{o.cancelLabel ?? t("cancel")}</button>}
               <button ref={confirmRef} className="primary" onClick={() => close(true)}>{o.confirmLabel ?? t("dlg.continue")}</button>
             </div>
           </div>

@@ -13,7 +13,7 @@ export interface StatRow { guideId: string; name: string; primary: number; secon
 export interface MonthView { year: number; month: number; status: "NEEDS_DRAFT" | "DRAFT" | "PUBLISHED"; needsConfirmedAt: string | null; publishedAt: string | null; occurrences: OccurrenceView[]; stats: StatRow[] }
 export interface Candidate { guideId: string; name: string; violations: Violation[] }
 export interface GuideListItem { id: string; name: string; email: string; phone: string | null; status: "INVITED" | "ACTIVE" | "DISABLED"; qualificationCount: number; secondaryCount: number; qualifications: { tourId: string; languageId: string }[] }
-export interface Unav { id: string; startDate: string; endDate: string; period: Period; slotId: string | null; note: string | null }
+export interface Unav { id: string; startDate: string; endDate: string; period: Period; slotId: string | null; afterMinutes: number | null; beforeMinutes: number | null; note: string | null }
 export interface Restriction { id: string; weekday: number; period: Period; notBeforeMinutes: number | null; notAfterMinutes: number | null }
 export interface Profile { id: string; name: string; email: string; phone: string | null; cityId: string | null; qualifications: { tourId: string; languageId: string }[]; unavailabilities: Unav[]; restrictions: Restriction[] }
 export interface MyItem { adminConfirmed: boolean; assignmentId: string; confirmedAt: string | null; confirm: { state: "NOT_YET" | "OPEN" | "ENDED"; opensAt: string } | null; occurrenceId: string; slotId: string; date: string; status: "ACTIVE" | "NO_DEMAND"; note: string | null; colleagues: string[] }

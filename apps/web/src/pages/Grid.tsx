@@ -163,7 +163,7 @@ export const GridPage = () => {
             <li><i className="sw complete" />{t("occ.complete")}</li>
             <li><i className="sw incomplete" />{t("legend.missing")}</li>
             <li><i className="sw ac" />{t("ac.badge")}</li>
-            <li><i className="sw nt" />{t("nt")}</li>
+            <li><i className="sw nt" />{t("occ.nt")}</li>
             <li><i className="sw off" />{t("legend.off")}</li>
             {m.status === "PUBLISHED" && <li><b className="cf-mark">✓</b>{t("confirm.byGuide")}</li>}
             {m.status === "PUBLISHED" && <li><b className="pend-mark">○</b>{t("confirm.pending")} · {t("legend.window", { h: c.settings.confirmWindowHours })}</li>}

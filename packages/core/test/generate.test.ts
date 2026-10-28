@@ -199,6 +199,19 @@ describe("geração", () => {
     expect(run([at16], [occ("t16")], [g]).stats[0]!.availableDays).toBe(30);
   });
 
+  it("indisponibilidade por hora numa data: depois das 16:00 e antes das 10:00", () => {
+    const after = guide("a", undefined, { unavailabilities: [{ startDate: D1, endDate: D1, period: "FULL_DAY", afterMinutes: 16 * 60 }] });
+    const before = guide("b", undefined, { unavailabilities: [{ startDate: D1, endDate: D1, period: "FULL_DAY", beforeMinutes: 10 * 60 }] });
+    const codes = (g: GuideInfo, s: SlotInfo) => checkAssignment(g, `${s.id}@${D1}`, s, D1, [], DEFAULT_SETTINGS).map((v) => v.code);
+    expect(codes(after, slot("t16", "16:00"))).toEqual([]);
+    expect(codes(after, slot("t1630", "16:30"))).toEqual(["UNAVAILABLE"]);
+    expect(codes(before, slot("t0930", "09:30"))).toEqual(["UNAVAILABLE"]);
+    expect(codes(before, slot("t10", "10:00"))).toEqual([]);
+    // Só nesse dia: no dia seguinte nada muda.
+    const next = checkAssignment(after, "x", slot("t1630", "16:30"), "2026-11-03", [], DEFAULT_SETTINGS);
+    expect(next).toEqual([]);
+  });
+
   it("é determinístico e preserva atribuições bloqueadas", () => {
     const s = slot("s1", "10:30");
     const guides = [guide("a"), guide("b")];
